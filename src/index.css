@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+  }
+
+  /* iOS safe areas */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Remove number input spinners */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  /* Date input styling for dark mode */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.5);
+  }
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
+@layer utilities {
+  .xs\:inline {
+    @media (min-width: 400px) {
+      display: inline;
+    }
+  }
+}
