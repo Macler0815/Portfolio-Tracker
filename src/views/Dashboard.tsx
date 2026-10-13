@@ -1,6 +1,6 @@
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudUpload, CheckCircle2, Loader2, Info } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
-import { formatCurrency, formatPercent, timeAgo, formatDateTime } from '@/lib/format';
+import { formatCurrency, formatPercent, timeAgo } from '@/lib/format';
 import { DonutChart } from '@/components/DonutChart';
 import { PerformanceChart } from '@/components/PerformanceChart';
 import { getAllocationByType, getTopAllocations } from '@/lib/calculations';
@@ -14,13 +14,13 @@ interface DashboardProps {
   lastRefresh: number | null;
   error: string | null;
   onRefresh: () => void;
-  onSyncAndBackup: () => void;
+  onICloudSync: () => void;
   syncing: boolean;
-  syncStep: 'idle' | 'refreshing' | 'saving' | 'done';
+  syncDone: boolean;
   hasApiKey: boolean;
 }
 
-export function Dashboard({ summary, holdings, transactions, currentPrices, refreshing, lastRefresh, error, onRefresh, onSyncAndBackup, syncing, syncStep, hasApiKey }: DashboardProps) {
+export function Dashboard({ summary, holdings, transactions, currentPrices, refreshing, lastRefresh, error, onRefresh, onICloudSync, syncing, syncDone, hasApiKey }: DashboardProps) {
   const alloc = getAllocationByType(holdings);
   const topAllocations = getTopAllocations(holdings, 8);
   const plPositive = summary.totalPL >= 0;
@@ -50,33 +50,31 @@ export function Dashboard({ summary, holdings, transactions, currentPrices, refr
         </button>
       </div>
 
-      {/* Prominent Sync & Backup Button */}
+      {/* iCloud Sync Button */}
       <button
-        onClick={onSyncAndBackup}
+        onClick={onICloudSync}
         disabled={syncing || holdings.length === 0}
         className="w-full flex items-center justify-between rounded-2xl bg-green-600 text-white px-5 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
       >
         <div className="flex items-center gap-3">
-          {syncStep === 'refreshing' ? (
+          {syncing ? (
             <Loader2 size={22} className="animate-spin" />
-          ) : syncStep === 'saving' ? (
-            <Loader2 size={22} className="animate-spin" />
-          ) : syncStep === 'done' ? (
+          ) : syncDone ? (
             <CheckCircle2 size={22} />
           ) : (
-            <CloudDownload size={22} />
+            <CloudUpload size={22} />
           )}
           <div className="text-left">
             <p className="text-sm font-semibold">
-              {syncStep === 'refreshing' ? 'Kurse werden abgerufen…' : syncStep === 'saving' ? 'Backup wird erstellt…' : syncStep === 'done' ? 'Gesichert!' : 'Aktualisieren & Sichern'}
+              {syncing ? 'Backup wird erstellt…' : syncDone ? 'Gesichert!' : 'iCloud-Backup'}
             </p>
             <p className="text-xs text-green-100">
-              {lastRefresh ? formatDateTime(lastRefresh) : 'Noch nicht aktualisiert'}
+              {syncDone ? 'portfolio.json bereitgestellt' : 'Tippe hier, um deine Daten für iPad/Mac in der iCloud bereitzustellen.'}
             </p>
           </div>
         </div>
-        {syncStep === 'idle' && (
-          <span className="text-xs font-medium text-green-100 bg-white/20 rounded-full px-2.5 py-1">
+        {!syncing && !syncDone && (
+          <span className="text-xs font-medium text-green-100 bg-white/20 rounded-full px-2.5 py-1 shrink-0">
             iCloud
           </span>
         )}

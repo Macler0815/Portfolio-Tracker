@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { LayoutDashboard, Briefcase, List, Settings as SettingsIcon, Plus } from 'lucide-react';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { useBiometric } from '@/hooks/useBiometric';
@@ -11,7 +11,6 @@ import { PriceEditModal } from '@/components/PriceEditModal';
 import { LockScreen } from '@/components/LockScreen';
 import type { Transaction, Holding, PortfolioExport } from '@/lib/types';
 import { getApiKeyConfig } from '@/lib/api';
-import { getSavedFileHandle, writeToHandle, verifyPermission } from '@/lib/icloud';
 
 type Tab = 'dashboard' | 'holdings' | 'transactions' | 'settings';
 
@@ -21,7 +20,7 @@ function App() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [priceModalOpen, setPriceModalOpen] = useState(false);
   const [priceHolding, setPriceHolding] = useState<Holding | null>(null);
-  const [syncStep, setSyncStep] = useState<'idle' | 'refreshing' | 'saving' | 'done'>('idle');
+  const [syncStep, setSyncStep] = useState<'idle' | 'saving' | 'done'>('idle');
 
   const portfolio = usePortfolio();
   const bio = useBiometric();
@@ -31,70 +30,28 @@ function App() {
     getApiKeyConfig().then((c) => setHasApiKey(!!c));
   }, [bio.state]);
 
-  // Extract known banks for autocomplete
   const knownBanks = Array.from(new Set(portfolio.transactions.map((t) => t.bank).filter(Boolean))) as string[];
 
-  // Track unlocked state in ref for event handlers
   const unlockedRef = useRef(false);
   unlockedRef.current = bio.state === 'unlocked';
 
-  // --- PWA Lifecycle: auto-refresh on foreground + auto-export on background ---
   const refreshPricesRef = useRef(portfolio.refreshPrices);
   refreshPricesRef.current = portfolio.refreshPrices;
 
-  const exportPortfolioRef = useRef(portfolio.exportPortfolio);
-  exportPortfolioRef.current = portfolio.exportPortfolio;
-
-  const triggerAutoExport = useCallback(async () => {
-    if (!unlockedRef.current) return;
-    const exportFn = exportPortfolioRef.current;
-    try {
-      const data = await exportFn();
-      const handle = await getSavedFileHandle();
-      if (handle && (await verifyPermission(handle, true))) {
-        await writeToHandle(handle, data);
-      } else {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'portfolio.json';
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch {
-      // Silent fail on background export
-    }
-  }, []);
-
+  // Auto-refresh on foreground (no auto-export on background)
   useEffect(() => {
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible') {
-        // Only auto-refresh if already unlocked (biometric hook re-locks on hidden)
         if (unlockedRef.current) {
           refreshPricesRef.current(true);
         }
-      } else if (document.visibilityState === 'hidden') {
-        triggerAutoExport();
       }
     }
-
-    function handlePageHide() {
-      triggerAutoExport();
-    }
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('pagehide', handlePageHide);
-    window.addEventListener('beforeunload', handlePageHide);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('pagehide', handlePageHide);
-      window.removeEventListener('beforeunload', handlePageHide);
-    };
-  }, [triggerAutoExport]);
-
-  // Auto-refresh on initial unlock (foreground) — only when unlocked
+  // Auto-refresh on initial unlock
   useEffect(() => {
     if (bio.state === 'unlocked' && !portfolio.loading && portfolio.transactions.length > 0) {
       portfolio.refreshPrices(true);
@@ -127,9 +84,7 @@ function App() {
     setPriceModalOpen(true);
   }
 
-  async function handleSyncAndBackup() {
-    setSyncStep('refreshing');
-    await portfolio.refreshPrices(true);
+  async function handleICloudSync() {
     setSyncStep('saving');
     try {
       const data: PortfolioExport = await portfolio.exportPortfolio();
@@ -149,7 +104,6 @@ function App() {
 
   const currentPrices = new Map(portfolio.holdings.map((h) => [h.symbol, h.currentPrice]));
 
-  // Gate: show lock screen for all non-unlocked states
   if (bio.state !== 'unlocked') {
     if (bio.state === 'checking' || portfolio.loading) {
       return (
@@ -173,7 +127,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 safe-top">
-      {/* Content */}
       {tab === 'dashboard' && (
         <Dashboard
           summary={portfolio.summary}
@@ -184,9 +137,9 @@ function App() {
           lastRefresh={portfolio.lastRefresh}
           error={portfolio.error}
           onRefresh={() => portfolio.refreshPrices(true)}
-          onSyncAndBackup={handleSyncAndBackup}
-          syncing={syncStep !== 'idle' && syncStep !== 'done'}
-          syncStep={syncStep}
+          onICloudSync={handleICloudSync}
+          syncing={syncStep === 'saving'}
+          syncDone={syncStep === 'done'}
           hasApiKey={hasApiKey}
         />
       )}
@@ -210,7 +163,6 @@ function App() {
         />
       )}
 
-      {/* Floating Action Button */}
       <button
         onClick={() => {
           setEditingTx(null);
@@ -222,7 +174,6 @@ function App() {
         <Plus size={26} />
       </button>
 
-      {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 z-20 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-t border-gray-200 dark:border-gray-800 safe-bottom">
         <div className="flex items-center justify-around max-w-2xl mx-auto px-2">
           {tabs.map((t) => {
@@ -244,7 +195,6 @@ function App() {
         </div>
       </nav>
 
-      {/* Modals */}
       <TransactionModal
         open={txModalOpen}
         editing={editingTx}
