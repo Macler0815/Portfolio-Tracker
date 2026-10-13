@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudDownload, CheckCircle2, Loader2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
 import { formatCurrency, formatPercent, timeAgo, formatDateTime } from '@/lib/format';
 import { DonutChart } from '@/components/DonutChart';
@@ -17,9 +17,10 @@ interface DashboardProps {
   onSyncAndBackup: () => void;
   syncing: boolean;
   syncStep: 'idle' | 'refreshing' | 'saving' | 'done';
+  hasApiKey: boolean;
 }
 
-export function Dashboard({ summary, holdings, transactions, currentPrices, refreshing, lastRefresh, error, onRefresh, onSyncAndBackup, syncing, syncStep }: DashboardProps) {
+export function Dashboard({ summary, holdings, transactions, currentPrices, refreshing, lastRefresh, error, onRefresh, onSyncAndBackup, syncing, syncStep, hasApiKey }: DashboardProps) {
   const alloc = getAllocationByType(holdings);
   const topAllocations = getTopAllocations(holdings, 8);
   const plPositive = summary.totalPL >= 0;
@@ -80,6 +81,15 @@ export function Dashboard({ summary, holdings, transactions, currentPrices, refr
           </span>
         )}
       </button>
+
+      {!hasApiKey && holdings.length > 0 && (
+        <div className="flex items-start gap-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3.5 py-3">
+          <Info size={18} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            Bitte trage in den Einstellungen einen kostenlosen API-Schlüssel ein, um Live-Kurse zu aktivieren.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3.5 py-3">

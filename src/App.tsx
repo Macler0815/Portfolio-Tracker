@@ -10,6 +10,7 @@ import { TransactionModal } from '@/components/TransactionModal';
 import { PriceEditModal } from '@/components/PriceEditModal';
 import { LockScreen } from '@/components/LockScreen';
 import type { Transaction, Holding, PortfolioExport } from '@/lib/types';
+import { getApiKeyConfig } from '@/lib/api';
 import { getSavedFileHandle, writeToHandle, verifyPermission } from '@/lib/icloud';
 
 type Tab = 'dashboard' | 'holdings' | 'transactions' | 'settings';
@@ -24,6 +25,11 @@ function App() {
 
   const portfolio = usePortfolio();
   const bio = useBiometric();
+  const [hasApiKey, setHasApiKey] = useState(false);
+
+  useEffect(() => {
+    getApiKeyConfig().then((c) => setHasApiKey(!!c));
+  }, [bio.state]);
 
   // Extract known banks for autocomplete
   const knownBanks = Array.from(new Set(portfolio.transactions.map((t) => t.bank).filter(Boolean))) as string[];
@@ -181,6 +187,7 @@ function App() {
           onSyncAndBackup={handleSyncAndBackup}
           syncing={syncStep !== 'idle' && syncStep !== 'done'}
           syncStep={syncStep}
+          hasApiKey={hasApiKey}
         />
       )}
       {tab === 'holdings' && (
@@ -199,7 +206,7 @@ function App() {
           onImport={portfolio.importPortfolio}
           onClear={portfolio.clearPortfolio}
           getExportData={portfolio.exportPortfolio}
-          onApiKeyChanged={() => portfolio.refreshPrices(true)}
+          onApiKeyChanged={() => { getApiKeyConfig().then((c) => setHasApiKey(!!c)); portfolio.refreshPrices(true); }}
         />
       )}
 

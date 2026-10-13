@@ -11,7 +11,7 @@ import {
   deleteManualPrice,
   clearAllData,
 } from '@/lib/db';
-import { fetchQuotes, isCacheValid } from '@/lib/api';
+import { fetchQuotes, isCacheValid, getApiKeyConfig } from '@/lib/api';
 import { computeHoldings, computeSummary } from '@/lib/calculations';
 
 export function usePortfolio() {
@@ -79,6 +79,15 @@ export function usePortfolio() {
           if (mountedRef.current) {
             setRefreshing(false);
             setLastRefresh(Date.now());
+          }
+          return;
+        }
+
+        const config = await getApiKeyConfig();
+        if (!config) {
+          if (mountedRef.current) {
+            setRefreshing(false);
+            setError('Bitte trage in den Einstellungen einen kostenlosen API-Schlüssel ein, um Live-Kurse zu aktivieren.');
           }
           return;
         }

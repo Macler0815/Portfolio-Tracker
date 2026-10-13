@@ -120,7 +120,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     setName('');
     setStep('details');
 
-    // Auto-resolve ISIN/WKN to Yahoo ticker in background
+    // Auto-resolve ISIN/WKN to ticker symbol in background
     if (needsTickerResolution(input)) {
       setTickerResolving(true);
       setTickerResolved(false);
@@ -332,10 +332,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 </div>
               </div>
 
-              {/* Yahoo Ticker */}
+              {/* Ticker Symbol */}
               <div>
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
-                  Yahoo-Ticker
+                  Ticker-Symbol
                   {tickerResolving && <span className="text-gray-400 ml-1"> wird gesucht…</span>}
                   {tickerResolved && yahooTicker && !tickerResolving && <span className="text-green-500 ml-1"> gefunden</span>}
                 </label>

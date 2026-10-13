@@ -31,7 +31,7 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
   const [icloudBusy, setIcloudBusy] = useState(false);
   const [icloudFolderName, setIcloudFolderName] = useState<string | null>(null);
 
-  const [apiProvider, setApiProvider] = useState<ApiProvider>('yahoo');
+  const [apiProvider, setApiProvider] = useState<ApiProvider>('finnhub');
   const [apiKey, setApiKey] = useState('');
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [apiKeyBusy, setApiKeyBusy] = useState(false);
@@ -60,21 +60,14 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
     setApiKeyBusy(true);
     setStatus(null);
     try {
-      if (apiProvider !== 'yahoo' && !apiKey.trim()) {
+      if (!apiKey.trim()) {
         setStatus({ type: 'error', msg: 'Bitte gib einen API-Schlüssel ein' });
         setApiKeyBusy(false);
         return;
       }
-      if (apiProvider === 'yahoo') {
-        await clearApiKeyConfig();
-        setApiKey('');
-        setApiKeySaved(false);
-        setStatus({ type: 'success', msg: 'Auf Yahoo Finance (kostenlos, kein Schlüssel nötig) umgestellt' });
-      } else {
-        await saveApiKeyConfig({ provider: apiProvider, apiKey: apiKey.trim() });
-        setApiKeySaved(true);
-        setStatus({ type: 'success', msg: 'API-Schlüssel gespeichert' });
-      }
+      await saveApiKeyConfig({ provider: apiProvider, apiKey: apiKey.trim() });
+      setApiKeySaved(true);
+      setStatus({ type: 'success', msg: 'API-Schlüssel gespeichert' });
       onApiKeyChanged?.();
     } catch {
       setStatus({ type: 'error', msg: 'Speichern fehlgeschlagen' });
@@ -87,7 +80,7 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
     setApiKeyBusy(true);
     try {
       await clearApiKeyConfig();
-      setApiProvider('yahoo');
+      setApiProvider('finnhub');
       setApiKey('');
       setApiKeySaved(false);
       setStatus({ type: 'success', msg: 'API-Schlüssel entfernt — Yahoo Finance wird verwendet' });
@@ -247,41 +240,21 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
         <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2">
             <Key size={18} className="text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Kursdaten-API</h2>
-            {apiKeySaved && apiProvider !== 'yahoo' && (
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Finanz-API-Schlüssel (API Key)</h2>
+            {apiKeySaved && (
               <span className="ml-auto text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-full px-2 py-0.5">
                 Aktiv
               </span>
             )}
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Standardmäßig werden Kurse über Yahoo Finance (kostenlos) geladen. Für höhere Zuverlässigkeit kannst du einen eigenen API-Schlüssel hinterlegen.
+            Erstelle dir auf finnhub.io oder twelvedata.com einen kostenlosen API-Key und trage ihn hier ein. Der Schlüssel wird lokal auf deinem Gerät gespeichert und nicht in den Quellcode übernommen.
           </p>
         </div>
         <div className="px-4 py-3.5 space-y-3">
           <div>
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1.5">Anbieter</label>
             <div className="flex gap-2">
-              <button
-                onClick={() => { setApiProvider('yahoo'); setApiKeySaved(false); }}
-                className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
-                  apiProvider === 'yahoo'
-                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-                }`}
-              >
-                Yahoo Finance
-              </button>
-              <button
-                onClick={() => { setApiProvider('alphavantage'); setApiKeySaved(false); }}
-                className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
-                  apiProvider === 'alphavantage'
-                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-                }`}
-              >
-                Alpha Vantage
-              </button>
               <button
                 onClick={() => { setApiProvider('finnhub'); setApiKeySaved(false); }}
                 className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
@@ -292,26 +265,34 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
               >
                 Finnhub
               </button>
+              <button
+                onClick={() => { setApiProvider('twelvedata'); setApiKeySaved(false); }}
+                className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
+                  apiProvider === 'twelvedata'
+                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                }`}
+              >
+                Twelve Data
+              </button>
             </div>
           </div>
 
-          {apiProvider !== 'yahoo' && (
-            <div>
-              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">API-Schlüssel</label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => { setApiKey(e.target.value); setApiKeySaved(false); }}
-                placeholder={apiProvider === 'alphavantage' ? 'Alpha Vantage API Key' : 'Finnhub API Token'}
-                className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
-              />
-              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                {apiProvider === 'alphavantage'
-                  ? 'Kostenloser Schlüssel unter alphavantage.co/support/#api-key'
-                  : 'Kostenloser Token unter finnhub.io/register'}
-              </p>
-            </div>
-          )}
+          <div>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">API-Schlüssel</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => { setApiKey(e.target.value); setApiKeySaved(false); }}
+              placeholder={apiProvider === 'finnhub' ? 'Finnhub API Token' : 'Twelve Data API Key'}
+              className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
+            />
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+              {apiProvider === 'finnhub'
+                ? 'Kostenloser Token unter finnhub.io/register'
+                : 'Kostenloser Schlüssel unter twelvedata.com/pricing'}
+            </p>
+          </div>
 
           <div className="flex gap-2">
             <button
@@ -322,7 +303,7 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
               {apiKeyBusy ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               Speichern
             </button>
-            {apiKeySaved && apiProvider !== 'yahoo' && (
+            {apiKeySaved && (
               <button
                 onClick={handleClearApiKey}
                 disabled={apiKeyBusy}
@@ -484,7 +465,7 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Über die App</h2>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-          Portfolio Tracker läuft komplett lokal in deinem Browser. Alle Daten werden auf deinem Gerät in IndexedDB gespeichert. Live-Kurse werden über Yahoo Finance oder einen optionalen API-Schlüssel (Alpha Vantage / Finnhub) abgerufen und für 15 Minuten zwischengespeichert. Keine Cloud, keine Registrierung.
+          Portfolio Tracker läuft komplett lokal in deinem Browser. Alle Daten werden auf deinem Gerät in IndexedDB gespeichert. Live-Kurse werden über Finnhub oder Twelve Data abgerufen und für 15 Minuten zwischengespeichert. Keine Cloud, keine Registrierung.
         </p>
         <div className="mt-3 flex items-center justify-between border-t border-gray-100 dark:border-gray-800 pt-3">
           <span className="text-xs text-gray-400 dark:text-gray-500">Version</span>
