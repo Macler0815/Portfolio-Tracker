@@ -187,7 +187,7 @@ function App() {
 
       {/* iOS iCloud Sync Modal Dialog */}
       {syncStep === 'modal' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 dark:border-gray-800">
             <div className="flex items-center gap-3 text-green-600 dark:text-green-400 mb-4">
               <Download size={28} />
@@ -250,7 +250,7 @@ function App() {
         <div className="flex items-center justify-around max-w-2xl mx-auto px-2">
           {tabs.map((t) => {
             const Icon = t.icon;
-const active = tab === t.id;
+            const active = tab === t.id;
 return (
 <button
 key={t.id}
