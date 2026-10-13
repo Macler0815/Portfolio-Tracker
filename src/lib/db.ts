@@ -1,10 +1,11 @@
 import type { Transaction as TxRecord } from './types';
 
 const DB_NAME = 'portfolio-tracker';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const TX_STORE = 'transactions';
 const PRICE_STORE = 'prices';
 const MANUAL_STORE = 'manual_prices';
+const SETTINGS_STORE = 'settings';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -23,6 +24,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(MANUAL_STORE)) {
         db.createObjectStore(MANUAL_STORE, { keyPath: 'symbol' });
+      }
+      if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
+        db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -89,4 +93,13 @@ export async function clearAllData(): Promise<void> {
   await tx(TX_STORE, 'readwrite', (s) => s.clear());
   await tx(PRICE_STORE, 'readwrite', (s) => s.clear());
   await tx(MANUAL_STORE, 'readwrite', (s) => s.clear());
+}
+
+export async function getSetting<T>(key: string): Promise<T | null> {
+  const row = await tx<{ key: string; value: T } | undefined>(SETTINGS_STORE, 'readonly', (s) => s.get(key));
+  return row?.value ?? null;
+}
+
+export async function setSetting<T>(key: string, value: T): Promise<void> {
+  await tx(SETTINGS_STORE, 'readwrite', (s) => s.put({ key, value }));
 }

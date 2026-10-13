@@ -199,6 +199,7 @@ function App() {
           onImport={portfolio.importPortfolio}
           onClear={portfolio.clearPortfolio}
           getExportData={portfolio.exportPortfolio}
+          onApiKeyChanged={() => portfolio.refreshPrices(true)}
         />
       )}
 

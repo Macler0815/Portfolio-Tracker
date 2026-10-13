@@ -81,15 +81,25 @@ export function usePortfolio() {
 
         const quotes = await fetchQuotes(toFetch);
         const newPrices = new Map(prices);
+        let updatedCount = 0;
         for (const [symbol, q] of quotes) {
           newPrices.set(symbol, { price: q.price, fetchedAt: Date.now() });
           await putPriceQuote({ symbol, price: q.price, fetchedAt: Date.now() });
+          updatedCount++;
         }
         if (mountedRef.current) {
           setPrices(newPrices);
           setLastRefresh(Date.now());
-          if (quotes.size < toFetch.length) {
-            setError(`${toFetch.length - quotes.size} Position(en) konnten nicht aktualisiert werden — manuelle Kurserfassung möglich`);
+          if (quotes.size === 0 && toFetch.length > 0) {
+            // Complete API failure — use cached prices as fallback
+            const hasCached = toFetch.some((s) => prices.has(s));
+            setError(
+              hasCached
+                ? 'Kurse konnten nicht geladen werden — es werden die zuletzt gespeicherten Kurse angezeigt'
+                : 'Kurse konnten nicht geladen werden'
+            );
+          } else if (updatedCount < toFetch.length) {
+            setError(`${toFetch.length - updatedCount} Position(en) konnten nicht aktualisiert werden — manuelle Kurserfassung möglich`);
           }
         }
       } catch {

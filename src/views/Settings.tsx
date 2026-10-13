@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Upload, Trash2, ShieldAlert, CheckCircle2, Github, Cloud, CloudOff, RefreshCw, FolderOpen, Loader2 } from 'lucide-react';
+import { Download, Upload, Trash2, ShieldAlert, CheckCircle2, Github, Cloud, CloudOff, RefreshCw, FolderOpen, Loader2, Key, Save } from 'lucide-react';
 import type { PortfolioExport } from '@/lib/types';
+import { getApiKeyConfig, saveApiKeyConfig, clearApiKeyConfig, type ApiProvider } from '@/lib/api';
 import {
   isFileSystemAccessSupported,
   getSavedFileHandle,
@@ -17,9 +18,10 @@ interface SettingsViewProps {
   onImport: (data: PortfolioExport) => Promise<void>;
   onClear: () => Promise<void>;
   getExportData: () => Promise<PortfolioExport>;
+  onApiKeyChanged?: () => void;
 }
 
-export function SettingsView({ onExport, onImport, onClear, getExportData }: SettingsViewProps) {
+export function SettingsView({ onExport, onImport, onClear, getExportData, onApiKeyChanged }: SettingsViewProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -28,6 +30,11 @@ export function SettingsView({ onExport, onImport, onClear, getExportData }: Set
   const [icloudConnected, setIcloudConnected] = useState(false);
   const [icloudBusy, setIcloudBusy] = useState(false);
   const [icloudFolderName, setIcloudFolderName] = useState<string | null>(null);
+
+  const [apiProvider, setApiProvider] = useState<ApiProvider>('yahoo');
+  const [apiKey, setApiKey] = useState('');
+  const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [apiKeyBusy, setApiKeyBusy] = useState(false);
 
   useEffect(() => {
     if (!icloudSupported) return;
@@ -38,6 +45,59 @@ export function SettingsView({ onExport, onImport, onClear, getExportData }: Set
       }
     });
   }, [icloudSupported]);
+
+  useEffect(() => {
+    getApiKeyConfig().then((config) => {
+      if (config) {
+        setApiProvider(config.provider);
+        setApiKey(config.apiKey);
+        setApiKeySaved(true);
+      }
+    });
+  }, []);
+
+  async function handleSaveApiKey() {
+    setApiKeyBusy(true);
+    setStatus(null);
+    try {
+      if (apiProvider !== 'yahoo' && !apiKey.trim()) {
+        setStatus({ type: 'error', msg: 'Bitte gib einen API-Schlüssel ein' });
+        setApiKeyBusy(false);
+        return;
+      }
+      if (apiProvider === 'yahoo') {
+        await clearApiKeyConfig();
+        setApiKey('');
+        setApiKeySaved(false);
+        setStatus({ type: 'success', msg: 'Auf Yahoo Finance (kostenlos, kein Schlüssel nötig) umgestellt' });
+      } else {
+        await saveApiKeyConfig({ provider: apiProvider, apiKey: apiKey.trim() });
+        setApiKeySaved(true);
+        setStatus({ type: 'success', msg: 'API-Schlüssel gespeichert' });
+      }
+      onApiKeyChanged?.();
+    } catch {
+      setStatus({ type: 'error', msg: 'Speichern fehlgeschlagen' });
+    } finally {
+      setApiKeyBusy(false);
+    }
+  }
+
+  async function handleClearApiKey() {
+    setApiKeyBusy(true);
+    try {
+      await clearApiKeyConfig();
+      setApiProvider('yahoo');
+      setApiKey('');
+      setApiKeySaved(false);
+      setStatus({ type: 'success', msg: 'API-Schlüssel entfernt — Yahoo Finance wird verwendet' });
+      onApiKeyChanged?.();
+    } catch {
+      setStatus({ type: 'error', msg: 'Entfernen fehlgeschlagen' });
+    } finally {
+      setApiKeyBusy(false);
+    }
+  }
 
   async function handleIcloudSave() {
     setIcloudBusy(true);
@@ -181,6 +241,99 @@ export function SettingsView({ onExport, onImport, onClear, getExportData }: Set
           {status.msg}
         </div>
       )}
+
+      {/* API Settings */}
+      <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden mb-4">
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2">
+            <Key size={18} className="text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Kursdaten-API</h2>
+            {apiKeySaved && apiProvider !== 'yahoo' && (
+              <span className="ml-auto text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-full px-2 py-0.5">
+                Aktiv
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Standardmäßig werden Kurse über Yahoo Finance (kostenlos) geladen. Für höhere Zuverlässigkeit kannst du einen eigenen API-Schlüssel hinterlegen.
+          </p>
+        </div>
+        <div className="px-4 py-3.5 space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1.5">Anbieter</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setApiProvider('yahoo'); setApiKeySaved(false); }}
+                className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
+                  apiProvider === 'yahoo'
+                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                }`}
+              >
+                Yahoo Finance
+              </button>
+              <button
+                onClick={() => { setApiProvider('alphavantage'); setApiKeySaved(false); }}
+                className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
+                  apiProvider === 'alphavantage'
+                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                }`}
+              >
+                Alpha Vantage
+              </button>
+              <button
+                onClick={() => { setApiProvider('finnhub'); setApiKeySaved(false); }}
+                className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
+                  apiProvider === 'finnhub'
+                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                }`}
+              >
+                Finnhub
+              </button>
+            </div>
+          </div>
+
+          {apiProvider !== 'yahoo' && (
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">API-Schlüssel</label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => { setApiKey(e.target.value); setApiKeySaved(false); }}
+                placeholder={apiProvider === 'alphavantage' ? 'Alpha Vantage API Key' : 'Finnhub API Token'}
+                className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
+              />
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                {apiProvider === 'alphavantage'
+                  ? 'Kostenloser Schlüssel unter alphavantage.co/support/#api-key'
+                  : 'Kostenloser Token unter finnhub.io/register'}
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSaveApiKey}
+              disabled={apiKeyBusy}
+              className="flex-1 rounded-xl bg-green-600 text-white py-2.5 text-sm font-medium active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              {apiKeyBusy ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              Speichern
+            </button>
+            {apiKeySaved && apiProvider !== 'yahoo' && (
+              <button
+                onClick={handleClearApiKey}
+                disabled={apiKeyBusy}
+                className="rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-2.5 px-4 text-sm font-medium active:scale-95 transition-transform disabled:opacity-50"
+              >
+                Entfernen
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* iCloud Drive Sync */}
       {icloudSupported && (
@@ -331,7 +484,7 @@ export function SettingsView({ onExport, onImport, onClear, getExportData }: Set
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Über die App</h2>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-          Portfolio Tracker läuft komplett lokal in deinem Browser. Alle Daten werden auf deinem Gerät in IndexedDB gespeichert. Live-Kurse werden über die Yahoo Finance API abgerufen und für 15 Minuten zwischengespeichert. Keine Cloud, keine Registrierung.
+          Portfolio Tracker läuft komplett lokal in deinem Browser. Alle Daten werden auf deinem Gerät in IndexedDB gespeichert. Live-Kurse werden über Yahoo Finance oder einen optionalen API-Schlüssel (Alpha Vantage / Finnhub) abgerufen und für 15 Minuten zwischengespeichert. Keine Cloud, keine Registrierung.
         </p>
       </div>
     </div>
