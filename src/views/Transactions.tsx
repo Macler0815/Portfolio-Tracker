@@ -27,7 +27,7 @@ export function TransactionsView({ transactions, onEdit, onDelete }: Transaction
       <div className="space-y-2.5">
         {transactions.map((t) => {
           const isBuy = t.type === 'buy';
-          const total = t.quantity * t.price + t.fee;
+          const total = t.quantity * t.price;
           return (
             <div
               key={t.id}
@@ -51,10 +51,10 @@ export function TransactionsView({ transactions, onEdit, onDelete }: Transaction
                   <span>{formatDate(t.date)}</span>
                   <span>·</span>
                   <span>{formatNumber(t.quantity)} × {formatCurrency(t.price)}</span>
-                  {t.fee > 0 && (
+                  {t.note && (
                     <>
                       <span>·</span>
-                      <span>Gebühr {formatCurrency(t.fee)}</span>
+                      <span className="truncate">{t.note}</span>
                     </>
                   )}
                   {t.bank && (

@@ -24,7 +24,7 @@ export function PerformanceChart({ transactions, currentPrices, height = 200 }: 
 
     for (const t of sorted) {
       if (t.type === 'buy') {
-        invested += t.quantity * t.price + t.fee;
+        invested += t.quantity * t.price + (t.fee || 0);
         quantities.set(t.symbol, (quantities.get(t.symbol) || 0) + t.quantity);
       } else {
         const sold = Math.min(t.quantity, quantities.get(t.symbol) || 0);

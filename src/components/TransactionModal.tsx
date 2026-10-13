@@ -33,7 +33,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [date, setDate] = useState(todayISO());
-  const [fee, setFee] = useState('');
+  const [note, setNote] = useState('');
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
   const [bank, setBank] = useState('');
@@ -52,7 +52,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setQuantity(String(editing.quantity));
       setPrice(String(editing.price));
       setDate(editing.date);
-      setFee(String(editing.fee || ''));
+      setNote(editing.note || '');
       setName(editing.name);
       setSymbol(editing.symbol);
       setBank(editing.bank || '');
@@ -66,7 +66,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setQuantity('');
       setPrice('');
       setDate(todayISO());
-      setFee('');
+      setNote('');
       setName('');
       setSymbol('');
       setBank('');
@@ -129,7 +129,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       quantity: qty,
       price: prc,
       date,
-      fee: parseFloat(fee) || 0,
+      fee: 0,
+      note: note.trim() || undefined,
       bank: bank.trim() || undefined,
     };
 
@@ -296,7 +297,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Name</label>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Wertpapiername</label>
                   <input
                     type="text"
                     value={name}
@@ -355,28 +356,27 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 </div>
               </div>
 
-              {/* Date & Fee */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Datum</label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Gebühren in €</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={fee}
-                    onChange={(e) => setFee(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
-                  />
-                </div>
+              {/* Date */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Kaufdatum</label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
+                />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Notizen</label>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Optionale Notizen zu dieser Transaktion"
+                  rows={3}
+                  className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none resize-none"
+                />
               </div>
 
               {/* Total preview */}
@@ -384,7 +384,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 px-4 py-3 flex items-center justify-between">
                   <span className="text-sm text-gray-500 dark:text-gray-400">Gesamtwert</span>
                   <span className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {(parseFloat(quantity) * parseFloat(price) + (parseFloat(fee) || 0)).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                    {(parseFloat(quantity) * parseFloat(price)).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                   </span>
                 </div>
               )}

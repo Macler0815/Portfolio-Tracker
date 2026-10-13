@@ -26,17 +26,17 @@ export function computeHoldings(transactions: Transaction[], prices: Map<string,
     const h = map.get(key)!;
 
     if (t.type === 'buy') {
-      const newInvested = h.invested + t.quantity * t.price + t.fee;
+      const newInvested = h.invested + t.quantity * t.price + (t.fee || 0);
       const newQty = h.quantity + t.quantity;
       h.avgBuyPrice = newQty > 0 ? newInvested / newQty : 0;
       h.invested = newInvested;
       h.quantity = newQty;
-      h.fees += t.fee;
+      h.fees += t.fee || 0;
     } else {
       const sellQty = Math.min(t.quantity, h.quantity);
       h.quantity -= sellQty;
       h.invested -= sellQty * h.avgBuyPrice;
-      h.fees += t.fee;
+      h.fees += t.fee || 0;
       if (h.quantity <= 0.0000001) {
         h.quantity = 0;
         h.invested = 0;

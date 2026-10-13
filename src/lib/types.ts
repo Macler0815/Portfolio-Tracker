@@ -11,7 +11,7 @@ export interface Transaction {
   quantity: number;
   price: number;
   date: string;
-  fee: number;
+  fee?: number;
   bank?: string;
   note?: string;
 }

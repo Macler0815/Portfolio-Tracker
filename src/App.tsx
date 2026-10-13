@@ -10,6 +10,7 @@ import { TransactionModal } from '@/components/TransactionModal';
 import { PriceEditModal } from '@/components/PriceEditModal';
 import { LockScreen } from '@/components/LockScreen';
 import type { Transaction, Holding, PortfolioExport } from '@/lib/types';
+import { getSavedFileHandle, writeToHandle, verifyPermission } from '@/lib/icloud';
 
 type Tab = 'dashboard' | 'holdings' | 'transactions' | 'settings';
 
@@ -38,18 +39,26 @@ function App() {
   const exportPortfolioRef = useRef(portfolio.exportPortfolio);
   exportPortfolioRef.current = portfolio.exportPortfolio;
 
-  const triggerAutoExport = useCallback(() => {
+  const triggerAutoExport = useCallback(async () => {
     if (!unlockedRef.current) return;
     const exportFn = exportPortfolioRef.current;
-    exportFn().then((data: PortfolioExport) => {
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'portfolio.json';
-      a.click();
-      URL.revokeObjectURL(url);
-    }).catch(() => {});
+    try {
+      const data = await exportFn();
+      const handle = await getSavedFileHandle();
+      if (handle && (await verifyPermission(handle, true))) {
+        await writeToHandle(handle, data);
+      } else {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'portfolio.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      // Silent fail on background export
+    }
   }, []);
 
   useEffect(() => {
@@ -189,6 +198,7 @@ function App() {
           onExport={portfolio.exportPortfolio}
           onImport={portfolio.importPortfolio}
           onClear={portfolio.clearPortfolio}
+          getExportData={portfolio.exportPortfolio}
         />
       )}
 
