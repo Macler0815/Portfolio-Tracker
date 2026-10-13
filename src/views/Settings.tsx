@@ -489,7 +489,7 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
         <div className="mt-3 flex items-center justify-between border-t border-gray-100 dark:border-gray-800 pt-3">
           <span className="text-xs text-gray-400 dark:text-gray-500">Version</span>
           <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-            1.0.0 · {new Date(__BUILD_TIME__).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}
+            {__APP_VERSION__} · {new Date(__BUILD_TIME__).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}
           </span>
         </div>
       </div>

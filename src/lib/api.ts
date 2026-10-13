@@ -211,6 +211,37 @@ async function finnhubQuotes(symbols: string[], apiKey: string): Promise<Map<str
 
 // --- Public API ---
 
+/**
+ * Resolve an ISIN, WKN, or arbitrary query to a Yahoo Finance ticker symbol.
+ * Returns the first matching stock/ETF result, or null if none found.
+ */
+export async function resolveTicker(query: string): Promise<SearchResult | null> {
+  if (!query.trim()) return null;
+  const results = await searchSymbol(query);
+  return results.length > 0 ? results[0] : null;
+}
+
+/**
+ * Check if a symbol looks like an ISIN (12 chars, alphanumeric, starts with 2 letters)
+ * or a WKN (6 chars, alphanumeric).
+ */
+export function isIsin(input: string): boolean {
+  return /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(input.toUpperCase());
+}
+
+export function isWkn(input: string): boolean {
+  return /^[A-Z0-9]{6}$/.test(input.toUpperCase());
+}
+
+export function needsTickerResolution(input: string): boolean {
+  const upper = input.toUpperCase().trim();
+  // If it already looks like a Yahoo ticker (contains a dot like .DE, .L, etc. or is all caps short)
+  if (upper.includes('.')) return false;
+  if (isIsin(upper)) return true;
+  if (isWkn(upper)) return true;
+  return false;
+}
+
 export async function searchSymbol(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return [];
 
@@ -230,24 +261,47 @@ export async function searchSymbol(query: string): Promise<SearchResult[]> {
   return yahooSearch(query);
 }
 
-export async function fetchQuotes(symbols: string[]): Promise<Map<string, QuoteResult>> {
+export async function fetchQuotes(symbols: string[], tickerMap?: Map<string, string>): Promise<Map<string, QuoteResult>> {
   const result = new Map<string, QuoteResult>();
   if (symbols.length === 0) return result;
 
+  // Build list of actual tickers to fetch (use yahooTicker if available)
+  const fetchSymbols = symbols.map((s) => tickerMap?.get(s) || s);
+
   const config = await getApiKeyConfig();
+
+  let quotes: Map<string, QuoteResult>;
 
   if (config) {
     if (config.provider === 'alphavantage') {
-      const quotes = await alphaVantageQuotes(symbols, config.apiKey);
-      if (quotes.size > 0) return quotes;
+      quotes = await alphaVantageQuotes(fetchSymbols, config.apiKey);
+      if (quotes.size > 0) {
+        // Map back to original symbols
+        for (const [ticker, q] of quotes) {
+          const origSymbol = symbols.find((s) => (tickerMap?.get(s) || s) === ticker);
+          if (origSymbol) result.set(origSymbol, q);
+        }
+        return result;
+      }
     } else if (config.provider === 'finnhub') {
-      const quotes = await finnhubQuotes(symbols, config.apiKey);
-      if (quotes.size > 0) return quotes;
+      quotes = await finnhubQuotes(fetchSymbols, config.apiKey);
+      if (quotes.size > 0) {
+        for (const [ticker, q] of quotes) {
+          const origSymbol = symbols.find((s) => (tickerMap?.get(s) || s) === ticker);
+          if (origSymbol) result.set(origSymbol, q);
+        }
+        return result;
+      }
     }
   }
 
   // Fallback to Yahoo Finance via CORS proxy
-  return yahooQuotes(symbols);
+  quotes = await yahooQuotes(fetchSymbols);
+  for (const [ticker, q] of quotes) {
+    const origSymbol = symbols.find((s) => (tickerMap?.get(s) || s) === ticker);
+    if (origSymbol) result.set(origSymbol, q);
+  }
+  return result;
 }
 
 export function isCacheValid(fetchedAt: number): boolean {

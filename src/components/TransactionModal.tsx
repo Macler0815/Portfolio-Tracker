@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search, X, Check, Loader2, Building2 } from 'lucide-react';
 import type { Transaction, TransactionType, AssetType } from '@/lib/types';
-import { searchSymbol, type SearchResult } from '@/lib/api';
+import { searchSymbol, resolveTicker, needsTickerResolution, type SearchResult } from '@/lib/api';
 import { todayISO } from '@/lib/format';
 
 interface TransactionModalProps {
@@ -10,13 +10,6 @@ interface TransactionModalProps {
   onClose: () => void;
   onSave: (t: Omit<Transaction, 'id'> | Transaction) => void;
   knownBanks: string[];
-}
-
-interface TransactionModalProps {
-  open: boolean;
-  editing: Transaction | null;
-  onClose: () => void;
-  onSave: (t: Omit<Transaction, 'id'> | Transaction) => void;
 }
 
 type Step = 'search' | 'details';
@@ -37,9 +30,14 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
   const [bank, setBank] = useState('');
+  const [yahooTicker, setYahooTicker] = useState('');
+  const [tickerResolved, setTickerResolved] = useState(false);
+  const [tickerResolving, setTickerResolving] = useState(false);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef('');
+  nameRef.current = name;
 
   // Reset or load editing transaction
   useEffect(() => {
@@ -56,6 +54,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setName(editing.name);
       setSymbol(editing.symbol);
       setBank(editing.bank || '');
+      setYahooTicker(editing.yahooTicker || '');
+      setTickerResolved(!!editing.yahooTicker);
     } else {
       setStep('search');
       setSelected(null);
@@ -70,6 +70,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setName('');
       setSymbol('');
       setBank('');
+      setYahooTicker('');
+      setTickerResolved(false);
     }
   }, [open, editing]);
 
@@ -105,15 +107,36 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     setSelected(r);
     setSymbol(r.symbol);
     setName(r.name);
+    setYahooTicker(r.symbol);
+    setTickerResolved(true);
     setAssetType(r.type === 'etf' ? 'etf' : 'stock');
     setStep('details');
   }
 
   function handleManualEntry() {
     setSelected(null);
-    setSymbol(searchQuery.toUpperCase());
+    const input = searchQuery.trim();
+    setSymbol(input.toUpperCase());
     setName('');
     setStep('details');
+
+    // Auto-resolve ISIN/WKN to Yahoo ticker in background
+    if (needsTickerResolution(input)) {
+      setTickerResolving(true);
+      setTickerResolved(false);
+      resolveTicker(input).then((result) => {
+        if (result) {
+          setYahooTicker(result.symbol);
+          if (!nameRef.current) setName(result.name);
+          if (result.type === 'etf') setAssetType('etf');
+        }
+        setTickerResolving(false);
+        setTickerResolved(true);
+      });
+    } else {
+      setYahooTicker(input.toUpperCase());
+      setTickerResolved(true);
+    }
   }
 
   function handleSave() {
@@ -132,6 +155,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       fee: 0,
       note: note.trim() || undefined,
       bank: bank.trim() || undefined,
+      yahooTicker: yahooTicker.trim() || undefined,
     };
 
     if (editing) {
@@ -292,7 +316,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                     type="text"
                     value={symbol}
                     onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                    placeholder="AAPL"
+                    placeholder="ISIN, WKN oder Ticker"
                     className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
                   />
                 </div>
@@ -306,6 +330,27 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                     className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Yahoo Ticker */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
+                  Yahoo-Ticker
+                  {tickerResolving && <span className="text-gray-400 ml-1"> wird gesucht…</span>}
+                  {tickerResolved && yahooTicker && !tickerResolving && <span className="text-green-500 ml-1"> gefunden</span>}
+                </label>
+                <input
+                  type="text"
+                  value={yahooTicker}
+                  onChange={(e) => { setYahooTicker(e.target.value.toUpperCase()); setTickerResolved(true); }}
+                  placeholder="z.B. VUAA.DE, SXR8.DE (für Kursabfrage)"
+                  className={`w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 outline-none ${
+                    tickerResolving ? 'focus:ring-yellow-400' : tickerResolved && yahooTicker ? 'focus:ring-green-500' : 'focus:ring-green-500'
+                  }`}
+                />
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                  Wird automatisch aus ISIN/WKN ermittelt. Nur nötig wenn die automatische Erkennung fehlschlägt.
+                </p>
               </div>
 
               {/* Quantity & Price */}

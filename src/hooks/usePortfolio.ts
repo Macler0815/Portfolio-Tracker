@@ -64,6 +64,10 @@ export function usePortfolio() {
       setError(null);
       try {
         const symbols = Array.from(new Set(transactions.map((t) => t.symbol)));
+        const tickerMap = new Map<string, string>();
+        for (const t of transactions) {
+          if (t.yahooTicker) tickerMap.set(t.symbol, t.yahooTicker);
+        }
         const toFetch = force
           ? symbols
           : symbols.filter((s) => {
@@ -79,7 +83,7 @@ export function usePortfolio() {
           return;
         }
 
-        const quotes = await fetchQuotes(toFetch);
+        const quotes = await fetchQuotes(toFetch, tickerMap);
         const newPrices = new Map(prices);
         let updatedCount = 0;
         for (const [symbol, q] of quotes) {
