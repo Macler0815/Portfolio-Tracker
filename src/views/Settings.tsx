@@ -486,6 +486,12 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
         <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
           Portfolio Tracker läuft komplett lokal in deinem Browser. Alle Daten werden auf deinem Gerät in IndexedDB gespeichert. Live-Kurse werden über Yahoo Finance oder einen optionalen API-Schlüssel (Alpha Vantage / Finnhub) abgerufen und für 15 Minuten zwischengespeichert. Keine Cloud, keine Registrierung.
         </p>
+        <div className="mt-3 flex items-center justify-between border-t border-gray-100 dark:border-gray-800 pt-3">
+          <span className="text-xs text-gray-400 dark:text-gray-500">Version</span>
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            1.0.0 · {new Date(__BUILD_TIME__).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}
+          </span>
+        </div>
       </div>
     </div>
   );
