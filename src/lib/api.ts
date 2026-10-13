@@ -177,28 +177,6 @@ async function twelveDataQuotes(symbols: string[], apiKey: string): Promise<Map<
 
 // --- Public API ---
 
-export async function resolveTicker(query: string): Promise<SearchResult | null> {
-  if (!query.trim()) return null;
-  const results = await searchSymbol(query);
-  return results.length > 0 ? results[0] : null;
-}
-
-export function isIsin(input: string): boolean {
-  return /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(input.toUpperCase());
-}
-
-export function isWkn(input: string): boolean {
-  return /^[A-Z0-9]{6}$/.test(input.toUpperCase());
-}
-
-export function needsTickerResolution(input: string): boolean {
-  const upper = input.toUpperCase().trim();
-  if (upper.includes('.')) return false;
-  if (isIsin(upper)) return true;
-  if (isWkn(upper)) return true;
-  return false;
-}
-
 export async function searchSymbol(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return [];
 

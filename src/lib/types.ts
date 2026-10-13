@@ -14,7 +14,8 @@ export interface Transaction {
   fee?: number;
   bank?: string;
   note?: string;
-  yahooTicker?: string;
+  ticker?: string;
+  isin?: string;
 }
 
 export interface PriceQuote {

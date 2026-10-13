@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search, X, Check, Loader2, Building2 } from 'lucide-react';
 import type { Transaction, TransactionType, AssetType } from '@/lib/types';
-import { searchSymbol, resolveTicker, needsTickerResolution, type SearchResult } from '@/lib/api';
+import { searchSymbol, type SearchResult } from '@/lib/api';
 import { todayISO } from '@/lib/format';
 
 interface TransactionModalProps {
@@ -29,15 +29,11 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   const [note, setNote] = useState('');
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
+  const [isin, setIsin] = useState('');
   const [bank, setBank] = useState('');
-  const [yahooTicker, setYahooTicker] = useState('');
-  const [tickerResolved, setTickerResolved] = useState(false);
-  const [tickerResolving, setTickerResolving] = useState(false);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
-  const nameRef = useRef('');
-  nameRef.current = name;
 
   // Reset or load editing transaction
   useEffect(() => {
@@ -53,9 +49,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setNote(editing.note || '');
       setName(editing.name);
       setSymbol(editing.symbol);
+      setIsin(editing.isin || '');
       setBank(editing.bank || '');
-      setYahooTicker(editing.yahooTicker || '');
-      setTickerResolved(!!editing.yahooTicker);
     } else {
       setStep('search');
       setSelected(null);
@@ -69,9 +64,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setNote('');
       setName('');
       setSymbol('');
+      setIsin('');
       setBank('');
-      setYahooTicker('');
-      setTickerResolved(false);
     }
   }, [open, editing]);
 
@@ -107,36 +101,16 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     setSelected(r);
     setSymbol(r.symbol);
     setName(r.name);
-    setYahooTicker(r.symbol);
-    setTickerResolved(true);
     setAssetType(r.type === 'etf' ? 'etf' : 'stock');
     setStep('details');
   }
 
   function handleManualEntry() {
     setSelected(null);
-    const input = searchQuery.trim();
-    setSymbol(input.toUpperCase());
+    const input = searchQuery.trim().toUpperCase();
+    setSymbol(input);
     setName('');
     setStep('details');
-
-    // Auto-resolve ISIN/WKN to ticker symbol in background
-    if (needsTickerResolution(input)) {
-      setTickerResolving(true);
-      setTickerResolved(false);
-      resolveTicker(input).then((result) => {
-        if (result) {
-          setYahooTicker(result.symbol);
-          if (!nameRef.current) setName(result.name);
-          if (result.type === 'etf') setAssetType('etf');
-        }
-        setTickerResolving(false);
-        setTickerResolved(true);
-      });
-    } else {
-      setYahooTicker(input.toUpperCase());
-      setTickerResolved(true);
-    }
   }
 
   function handleSave() {
@@ -155,7 +129,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       fee: 0,
       note: note.trim() || undefined,
       bank: bank.trim() || undefined,
-      yahooTicker: yahooTicker.trim() || undefined,
+      ticker: symbol.toUpperCase(),
+      isin: isin.trim() || undefined,
     };
 
     if (editing) {
@@ -196,7 +171,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Ticker, ISIN oder Name (z.B. AAPL, VUAA.DE)"
+                  placeholder="Ticker oder Name (z.B. AAPL, EUNL.DE)"
                   className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 pl-10 pr-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
                   autoFocus
                 />
@@ -243,7 +218,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
               {!searching && !searchQuery.trim() && (
                 <div className="mt-6 text-center py-8">
                   <p className="text-sm text-gray-400 dark:text-gray-500">
-                    Suche nach Ticker (AAPL), ISIN oder Name um Live-Kurse zu erhalten
+                    Suche nach Ticker (AAPL, EUNL.DE) oder Name um Live-Kurse zu erhalten
                   </p>
                 </div>
               )}
@@ -308,49 +283,51 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 </button>
               </div>
 
-              {/* Symbol & Name */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Ticker/Symbol</label>
-                  <input
-                    type="text"
-                    value={symbol}
-                    onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                    placeholder="ISIN, WKN oder Ticker"
-                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Wertpapiername</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Apple Inc."
-                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Ticker Symbol */}
+              {/* Symbol / Ticker (required) */}
               <div>
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
-                  Ticker-Symbol
-                  {tickerResolving && <span className="text-gray-400 ml-1"> wird gesucht…</span>}
-                  {tickerResolved && yahooTicker && !tickerResolving && <span className="text-green-500 ml-1"> gefunden</span>}
+                  Symbol / Ticker <span className="text-red-500">*</span>
+                </label>
+                <input
+                  ref={firstInputRef}
+                  type="text"
+                  value={symbol}
+                  onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                  placeholder="z.B. AAPL oder EUNL.DE"
+                  className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
+                />
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                  Tipp für ETFs: Nutze das Tickersymbol mit Endung, z.B. &apos;EUNL.DE&apos; für den iShares MSCI World (Xetra) oder &apos;VUSA.DE&apos; für S&amp;P 500.
+                </p>
+              </div>
+
+              {/* ISIN / WKN (optional, documentation only) */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
+                  ISIN / WKN <span className="text-gray-400 font-normal">(optional)</span>
                 </label>
                 <input
                   type="text"
-                  value={yahooTicker}
-                  onChange={(e) => { setYahooTicker(e.target.value.toUpperCase()); setTickerResolved(true); }}
-                  placeholder="z.B. VUAA.DE, SXR8.DE (für Kursabfrage)"
-                  className={`w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 outline-none ${
-                    tickerResolving ? 'focus:ring-yellow-400' : tickerResolved && yahooTicker ? 'focus:ring-green-500' : 'focus:ring-green-500'
-                  }`}
+                  value={isin}
+                  onChange={(e) => setIsin(e.target.value.toUpperCase())}
+                  placeholder="z.B. IE00B4L5Y983 oder A1JX51"
+                  className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
                 />
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                  Wird automatisch aus ISIN/WKN ermittelt. Nur nötig wenn die automatische Erkennung fehlschlägt.
+                  Nur zur Dokumentation — wird nicht für die Kursabfrage verwendet.
                 </p>
+              </div>
+
+              {/* Wertpapiername */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Wertpapiername</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="z.B. Apple Inc. oder iShares MSCI World"
+                  className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
+                />
               </div>
 
               {/* Quantity & Price */}
@@ -358,7 +335,6 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 <div>
                   <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Stückzahl</label>
                   <input
-                    ref={firstInputRef}
                     type="number"
                     inputMode="decimal"
                     value={quantity}
