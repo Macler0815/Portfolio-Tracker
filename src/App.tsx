@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, Briefcase, List, Settings as SettingsIcon, Plus } from 'lucide-react';
+import { LayoutDashboard, Briefcase, List, Settings as SettingsIcon, Plus, Download, AlertCircle } from 'lucide-react';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { useBiometric } from '@/hooks/useBiometric';
 import { Dashboard } from '@/views/Dashboard';
@@ -20,7 +20,8 @@ function App() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [priceModalOpen, setPriceModalOpen] = useState(false);
   const [priceHolding, setPriceHolding] = useState<Holding | null>(null);
-  const [syncStep, setSyncStep] = useState<'idle' | 'saving' | 'done'>('idle');
+  const [syncStep, setSyncStep] = useState<'idle' | 'saving' | 'modal' | 'done'>('idle');
+  const [iosBlobUrl, setIosBlobUrl] = useState<string>('');
 
   const portfolio = usePortfolio();
   const bio = useBiometric();
@@ -38,7 +39,7 @@ function App() {
   const refreshPricesRef = useRef(portfolio.refreshPrices);
   refreshPricesRef.current = portfolio.refreshPrices;
 
-  // Auto-refresh on foreground (no auto-export on background)
+  // Auto-refresh on foreground
   useEffect(() => {
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible') {
@@ -56,7 +57,6 @@ function App() {
     if (bio.state === 'unlocked' && !portfolio.loading && portfolio.transactions.length > 0) {
       portfolio.refreshPrices(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bio.state, portfolio.loading]);
 
   const tabs: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
@@ -88,15 +88,37 @@ function App() {
     setSyncStep('saving');
     try {
       const data: PortfolioExport = await portfolio.exportPortfolio();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const jsonString = JSON.stringify(data, null, 2);
+
+      // Weg 1: Prüfe auf die moderne File System Access API (für Desktop/Mac)
+      if ('showSaveFilePicker' in window) {
+        try {
+          const handle = await (window as any).showSaveFilePicker({
+            suggestedName: 'portfolio.json',
+            types: [{
+              description: 'JSON File',
+              accept: { 'application/json': ['.json'] },
+            }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(jsonString);
+          await writable.close();
+          setSyncStep('done');
+          setTimeout(() => setSyncStep('idle'), 2500);
+          return;
+        } catch (err: any) {
+          if (err.name === 'AbortError') {
+            setSyncStep('idle');
+            return;
+          }
+        }
+      }
+
+      // iOS / Safari Fallback: Bereite ein strukturiertes Dialogfenster vor
+      const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'portfolio.json';
-      a.click();
-      URL.revokeObjectURL(url);
-      setSyncStep('done');
-      setTimeout(() => setSyncStep('idle'), 2500);
+      setIosBlobUrl(url);
+      setSyncStep('modal');
     } catch {
       setSyncStep('idle');
     }
@@ -163,6 +185,56 @@ function App() {
         />
       )}
 
+      {/* iOS iCloud Sync Modal Dialog */}
+      {syncStep === 'modal' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3 text-green-600 dark:text-green-400 mb-4">
+              <Download size={28} />
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Backup in iCloud sichern</h3>
+            </div>
+            
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5 leading-relaxed">
+              Deine aktuellen Portfoliodaten sind bereit. Tippe unten auf den Button, um den Speicherort (deinen iCloud-Ordner) selbst auszuwählen.
+            </p>
+
+            <div className="flex gap-2 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-200/50 dark:border-amber-900/30 mb-5">
+              <AlertCircle className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={16} />
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                <strong>iOS-Tipp:</strong> Falls die Datei automatisch heruntergeladen wird, stelle in den iPhone-Einstellungen unter <em>Safari &rarr; Downloads</em> auf <strong>"Jedes Mal fragen"</strong>.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <a
+                href={iosBlobUrl}
+                download="portfolio.json"
+                onClick={() => {
+                  setSyncStep('done');
+                  setTimeout(() => {
+                    setSyncStep('idle');
+                    URL.revokeObjectURL(iosBlobUrl);
+                  }, 2000);
+                }}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-green-600/20 active:scale-95 transition-transform"
+              >
+                <Download size={18} />
+                Speicherort wählen
+              </a>
+              <button
+                onClick={() => {
+                  setSyncStep('idle');
+                  URL.revokeObjectURL(iosBlobUrl);
+                }}
+                className="w-full bg-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 py-2 text-sm font-medium"
+              >
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <button
         onClick={() => {
           setEditingTx(null);
@@ -178,45 +250,40 @@ function App() {
         <div className="flex items-center justify-around max-w-2xl mx-auto px-2">
           {tabs.map((t) => {
             const Icon = t.icon;
-            const active = tab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`flex flex-col items-center gap-0.5 py-2 px-3 transition-colors ${
-                  active ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'
-                }`}
-              >
-                <Icon size={22} strokeWidth={active ? 2.5 : 2} />
-                <span className="text-[10px] font-medium">{t.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+const active = tab === t.id;
+return (
+<button
+key={t.id}
+onClick={() => setTab(t.id)}
+className={flex flex-col items-center gap-0.5 py-2 px-3 transition-colors ${ active ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500' }}
+>
+<Icon size={22} strokeWidth={active ? 2.5 : 2} />
+{t.label}
 
-      <TransactionModal
-        open={txModalOpen}
-        editing={editingTx}
-        onClose={() => {
-          setTxModalOpen(false);
-          setEditingTx(null);
-        }}
-        onSave={handleSaveTransaction}
-        knownBanks={knownBanks}
-      />
-      <PriceEditModal
-        open={priceModalOpen}
-        holding={priceHolding}
-        onClose={() => {
-          setPriceModalOpen(false);
-          setPriceHolding(null);
-        }}
-        onSave={portfolio.setManualPrice}
-        onRemove={portfolio.removeManualPrice}
-      />
-    </div>
-  );
+);
+})}
+
+<TransactionModal
+open={txModalOpen}
+editing={editingTx}
+onClose={() => {
+setTxModalOpen(false);
+setEditingTx(null);
+}}
+onSave={handleSaveTransaction}
+knownBanks={knownBanks}
+/>
+<PriceEditModal
+open={priceModalOpen}
+holding={priceHolding}
+onClose={() => {
+setPriceModalOpen(false);
+setPriceHolding(null);
+}}
+onSave={portfolio.setManualPrice}
+onRemove={portfolio.removeManualPrice}
+/>
+
+);
 }
-
 export default App;
