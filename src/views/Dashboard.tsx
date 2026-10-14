@@ -1,9 +1,6 @@
 import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudUpload, CheckCircle2, Loader2, Info } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
-import { formatCurrency, formatPercent, timeAgo } from '@/lib/format';
-import { DonutChart } from '@/components/DonutChart';
-import { PerformanceChart } from '@/components/PerformanceChart';
-import { getAllocationByType, getTopAllocations } from '@/lib/calculations';
+import { formatCurrency, formatPercent, formatNumber, timeAgo } from '@/lib/format';
 
 interface DashboardProps {
   summary: PortfolioSummary;
@@ -20,15 +17,8 @@ interface DashboardProps {
   hasApiKey: boolean;
 }
 
-export function Dashboard({ summary, holdings, transactions, currentPrices, refreshing, lastRefresh, error, onRefresh, onICloudSync, syncing, syncDone, hasApiKey }: DashboardProps) {
-  const alloc = getAllocationByType(holdings);
-  const topAllocations = getTopAllocations(holdings, 8);
+export function Dashboard({ summary, holdings, refreshing, lastRefresh, error, onRefresh, onICloudSync, syncing, syncDone, hasApiKey }: DashboardProps) {
   const plPositive = summary.totalPL >= 0;
-
-  const donutSegments = [
-    { label: 'Aktien', value: alloc.stocks, color: '#1d8643' },
-    { label: 'ETFs', value: alloc.etfs, color: '#2563eb' },
-  ];
 
   return (
     <div className="px-4 pt-2 pb-24 space-y-5 max-w-2xl mx-auto">
@@ -129,71 +119,32 @@ export function Dashboard({ summary, holdings, transactions, currentPrices, refr
         </div>
       </div>
 
-      {/* Asset Allocation */}
+      {/* Alle Positionen */}
       {holdings.length > 0 && (
         <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Asset Allocation</h2>
-          <div className="flex items-center gap-6">
-            <DonutChart
-              segments={donutSegments}
-              centerLabel="Total"
-              centerValue={formatCurrency(summary.totalValue, 'EUR', true)}
-              size={160}
-            />
-            <div className="flex-1 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-[#1d8643]" />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Aktien</span>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Alle Positionen</h2>
+          <div className="space-y-3">
+            {holdings.map((h) => (
+              <div key={h.symbol} className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{h.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {h.symbol} · {formatNumber(h.quantity, 4)} Stück
+                  </p>
                 </div>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {summary.totalValue > 0 ? ((alloc.stocks / summary.totalValue) * 100).toFixed(1) : '0'}%
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-[#2563eb]" />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">ETFs</span>
-                </div>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {summary.totalValue > 0 ? ((alloc.etfs / summary.totalValue) * 100).toFixed(1) : '0'}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {topAllocations.length > 0 && (
-            <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-2.5">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Top Positionen</p>
-              {topAllocations.map((a) => (
-                <div key={a.symbol} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: a.color }} />
-                    <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{a.name}</span>
+                <div className="grid grid-cols-2 gap-3 text-right shrink-0">
+                  <div>
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500 block">Kaufkurs</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{formatCurrency(h.avgBuyPrice)}</span>
                   </div>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white shrink-0 ml-2">{a.percent.toFixed(1)}%</span>
+                  <div>
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500 block">Aktuell</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(h.currentPrice)}</span>
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Performance Chart */}
-      {transactions.length > 0 && (
-        <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Performance</h2>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
-                <span className="w-4 h-0.5 bg-[#1d8643]" /> Portfolio
-              </span>
-              <span className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
-                <span className="w-4 h-0.5 border-t border-dashed border-gray-400" /> Investiert
-              </span>
-            </div>
+              </div>
+            ))}
           </div>
-          <PerformanceChart transactions={transactions} currentPrices={currentPrices} height={180} />
         </div>
       )}
 

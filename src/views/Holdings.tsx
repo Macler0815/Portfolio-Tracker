@@ -1,13 +1,16 @@
 import { AlertTriangle, Edit3 } from 'lucide-react';
-import type { Holding } from '@/lib/types';
+import type { Holding, Transaction } from '@/lib/types';
 import { formatCurrency, formatPercent, formatNumber } from '@/lib/format';
+import { PerformanceChart } from '@/components/PerformanceChart';
 
 interface HoldingsViewProps {
   holdings: Holding[];
+  transactions: Transaction[];
+  currentPrices: Map<string, number>;
   onEditPrice: (holding: Holding) => void;
 }
 
-export function HoldingsView({ holdings, onEditPrice }: HoldingsViewProps) {
+export function HoldingsView({ holdings, transactions, currentPrices, onEditPrice }: HoldingsViewProps) {
   if (holdings.length === 0) {
     return (
       <div className="px-4 pt-2 pb-24 max-w-2xl mx-auto">
@@ -22,6 +25,7 @@ export function HoldingsView({ holdings, onEditPrice }: HoldingsViewProps) {
   return (
     <div className="px-4 pt-2 pb-24 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white mb-4">Positionen</h1>
+
       <div className="space-y-3">
         {holdings.map((h) => {
           const plPositive = h.pl >= 0;
@@ -86,6 +90,24 @@ export function HoldingsView({ holdings, onEditPrice }: HoldingsViewProps) {
           );
         })}
       </div>
+
+      {/* Performance Chart */}
+      {transactions.length > 0 && (
+        <div className="mt-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Performance</h2>
+            <div className="flex items-center gap-3 text-xs">
+              <span className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                <span className="w-4 h-0.5 bg-[#1d8643]" /> Portfolio
+              </span>
+              <span className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                <span className="w-4 h-0.5 border-t border-dashed border-gray-400" /> Investiert
+              </span>
+            </div>
+          </div>
+          <PerformanceChart transactions={transactions} currentPrices={currentPrices} height={180} />
+        </div>
+      )}
     </div>
   );
 }

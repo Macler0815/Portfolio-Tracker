@@ -166,7 +166,12 @@ function App() {
         />
       )}
       {tab === 'holdings' && (
-        <HoldingsView holdings={portfolio.holdings} onEditPrice={handleEditPrice} />
+        <HoldingsView
+          holdings={portfolio.holdings}
+          transactions={portfolio.transactions}
+          currentPrices={currentPrices}
+          onEditPrice={handleEditPrice}
+        />
       )}
       {tab === 'transactions' && (
         <TransactionsView
