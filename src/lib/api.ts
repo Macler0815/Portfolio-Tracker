@@ -201,9 +201,13 @@ export async function fetchQuotes(symbols: string[], tickerMap?: Map<string, str
   if (symbols.length === 0) return result;
 
   const config = await getApiKeyConfig();
-  if (!config) return result;
+  if (!config) {
+    console.warn('[fetchQuotes] Kein API-Key konfiguriert — Kurse können nicht abgerufen werden');
+    return result;
+  }
 
   const fetchSymbols = symbols.map((s) => tickerMap?.get(s) || s);
+  console.info(`[fetchQuotes] Provider: ${config.provider}, Symbole: ${fetchSymbols.join(', ')}`);
 
   let quotes: Map<string, QuoteResult> = new Map();
 
@@ -213,15 +217,43 @@ export async function fetchQuotes(symbols: string[], tickerMap?: Map<string, str
     } else if (config.provider === 'twelvedata') {
       quotes = await twelveDataQuotes(fetchSymbols, config.apiKey);
     }
-  } catch {
-    // network error — return empty
+  } catch (err) {
+    console.error('[fetchQuotes] Netzwerkfehler:', err);
   }
+
+  console.info(`[fetchQuotes] ${quotes.size} von ${fetchSymbols.length} Kursen erhalten`);
 
   for (const [ticker, q] of quotes) {
     const origSymbol = symbols.find((s) => (tickerMap?.get(s) || s) === ticker);
     if (origSymbol) result.set(origSymbol, q);
   }
+
+  if (result.size === 0 && fetchSymbols.length > 0) {
+    console.warn(`[fetchQuotes] Keine Kurse für [${fetchSymbols.join(', ')}] erhalten. Mögliche Ursachen: ungültiger API-Key, Rate-Limit erreicht, oder Symbole werden vom Provider nicht unterstützt.`);
+  }
+
   return result;
+}
+
+export async function fetchSingleQuote(ticker: string): Promise<QuoteResult | null> {
+  if (!ticker.trim()) return null;
+  const config = await getApiKeyConfig();
+  if (!config) return null;
+
+  const sym = ticker.toUpperCase().trim();
+  let quotes: Map<string, QuoteResult> = new Map();
+
+  try {
+    if (config.provider === 'finnhub') {
+      quotes = await finnhubQuotes([sym], config.apiKey);
+    } else if (config.provider === 'twelvedata') {
+      quotes = await twelveDataQuotes([sym], config.apiKey);
+    }
+  } catch {
+    return null;
+  }
+
+  return quotes.get(sym) || null;
 }
 
 export function isCacheValid(fetchedAt: number): boolean {

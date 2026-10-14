@@ -105,15 +105,16 @@ export function usePortfolio() {
           setPrices(newPrices);
           setLastRefresh(Date.now());
           if (quotes.size === 0 && toFetch.length > 0) {
-            // Complete API failure — use cached prices as fallback
+            const failedSymbols = toFetch.map((s) => tickerMap.get(s) || s).join(', ');
             const hasCached = toFetch.some((s) => prices.has(s));
             setError(
               hasCached
-                ? 'Kurse konnten nicht geladen werden — es werden die zuletzt gespeicherten Kurse angezeigt'
-                : 'Kurse konnten nicht geladen werden'
+                ? `Kurse für [${failedSymbols}] konnten nicht geladen werden — es werden gespeicherte Kurse angezeigt. Prüfe API-Key und Tickersymbole.`
+                : `Kurse für [${failedSymbols}] konnten nicht geladen werden. Prüfe in den Einstellungen deinen API-Key und ob die Tickersymbole korrekt sind (z.B. EUNL.DE für Xetra-ETFs).`
             );
           } else if (updatedCount < toFetch.length) {
-            setError(`${toFetch.length - updatedCount} Position(en) konnten nicht aktualisiert werden — manuelle Kurserfassung möglich`);
+            const failed = toFetch.filter((s) => !quotes.has(s)).map((s) => tickerMap.get(s) || s).join(', ');
+            setError(`Kurse für [${failed}] konnten nicht aktualisiert werden — Ticker prüfen oder manuell erfassen`);
           }
         }
       } catch {

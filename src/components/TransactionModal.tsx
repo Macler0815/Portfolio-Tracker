@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, X, Check, Loader2, Building2 } from 'lucide-react';
+import { Search, X, Check, Loader2, Building2, TrendingUp } from 'lucide-react';
 import type { Transaction, TransactionType, AssetType } from '@/lib/types';
-import { searchSymbol, type SearchResult } from '@/lib/api';
+import { searchSymbol, fetchSingleQuote, type SearchResult } from '@/lib/api';
 import { todayISO } from '@/lib/format';
 
 interface TransactionModalProps {
@@ -25,14 +25,18 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   const [assetType, setAssetType] = useState<AssetType>('stock');
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
+  const [priceFetching, setPriceFetching] = useState(false);
+  const [priceFetched, setPriceFetched] = useState(false);
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState('');
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
   const [isin, setIsin] = useState('');
+  const [wkn, setWkn] = useState('');
   const [bank, setBank] = useState('');
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const priceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   // Reset or load editing transaction
@@ -49,8 +53,13 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setNote(editing.note || '');
       setName(editing.name);
       setSymbol(editing.symbol);
-      setIsin(editing.isin || '');
+      // Parse combined "ISIN - WKN" from stored isin field
+      const rawIsin = editing.isin || '';
+      const parts = rawIsin.split(' - ');
+      setIsin(parts[0] || '');
+      setWkn(parts[1] || '');
       setBank(editing.bank || '');
+      setPriceFetched(true);
     } else {
       setStep('search');
       setSelected(null);
@@ -60,11 +69,14 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setAssetType('stock');
       setQuantity('');
       setPrice('');
+      setPriceFetching(false);
+      setPriceFetched(false);
       setDate(todayISO());
       setNote('');
       setName('');
       setSymbol('');
       setIsin('');
+      setWkn('');
       setBank('');
     }
   }, [open, editing]);
@@ -88,6 +100,29 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     };
   }, [searchQuery, step]);
 
+  // Auto-fetch current price when symbol changes (details step, not editing)
+  useEffect(() => {
+    if (step !== 'details') return;
+    if (editing) return;
+    if (!symbol.trim()) return;
+    // Don't refetch if user already has a price and is editing it manually
+    if (priceFetched && price) return;
+
+    if (priceTimer.current) clearTimeout(priceTimer.current);
+    setPriceFetching(true);
+    priceTimer.current = setTimeout(async () => {
+      const quote = await fetchSingleQuote(symbol);
+      if (quote && quote.price > 0) {
+        setPrice(quote.price.toString());
+        setPriceFetched(true);
+      }
+      setPriceFetching(false);
+    }, 600);
+    return () => {
+      if (priceTimer.current) clearTimeout(priceTimer.current);
+    };
+  }, [symbol, step, editing]);
+
   // Focus first input on details step
   useEffect(() => {
     if (step === 'details' && !editing) {
@@ -102,6 +137,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     setSymbol(r.symbol);
     setName(r.name);
     setAssetType(r.type === 'etf' ? 'etf' : 'stock');
+    setPriceFetched(false);
+    setPrice('');
     setStep('details');
   }
 
@@ -110,6 +147,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     const input = searchQuery.trim().toUpperCase();
     setSymbol(input);
     setName('');
+    setPriceFetched(false);
+    setPrice('');
     setStep('details');
   }
 
@@ -117,6 +156,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     const qty = parseFloat(quantity);
     const prc = parseFloat(price);
     if (!symbol || !qty || !prc || !date) return;
+
+    const combinedIsin = [isin.trim(), wkn.trim()].filter(Boolean).join(' - ');
 
     const data = {
       symbol: symbol.toUpperCase(),
@@ -130,7 +171,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       note: note.trim() || undefined,
       bank: bank.trim() || undefined,
       ticker: symbol.toUpperCase(),
-      isin: isin.trim() || undefined,
+      isin: combinedIsin || undefined,
     };
 
     if (editing) {
@@ -292,7 +333,11 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                   ref={firstInputRef}
                   type="text"
                   value={symbol}
-                  onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    setSymbol(e.target.value.toUpperCase());
+                    setPriceFetched(false);
+                    setPrice('');
+                  }}
                   placeholder="z.B. AAPL oder EUNL.DE"
                   className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
                 />
@@ -306,13 +351,23 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
                   ISIN / WKN <span className="text-gray-400 font-normal">(optional)</span>
                 </label>
-                <input
-                  type="text"
-                  value={isin}
-                  onChange={(e) => setIsin(e.target.value.toUpperCase())}
-                  placeholder="z.B. IE00B4L5Y983 oder A1JX51"
-                  className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
-                />
+                <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                  <input
+                    type="text"
+                    value={isin}
+                    onChange={(e) => setIsin(e.target.value.toUpperCase())}
+                    placeholder="IE00B4L5Y983"
+                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
+                  />
+                  <span className="text-gray-400 dark:text-gray-500 text-sm font-medium">-</span>
+                  <input
+                    type="text"
+                    value={wkn}
+                    onChange={(e) => setWkn(e.target.value.toUpperCase())}
+                    placeholder="A1JX51"
+                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
+                  />
+                </div>
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
                   Nur zur Dokumentation — wird nicht für die Kursabfrage verwendet.
                 </p>
@@ -344,14 +399,18 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Kurs in €</label>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1 flex items-center gap-1.5">
+                    Kurs in €
+                    {priceFetching && <Loader2 size={12} className="animate-spin text-gray-400" />}
+                    {priceFetched && !priceFetching && price && <TrendingUp size={12} className="text-green-500" />}
+                  </label>
                   <input
                     type="number"
                     inputMode="decimal"
                     value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder="150.00"
-                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
+                    onChange={(e) => { setPrice(e.target.value); setPriceFetched(true); }}
+                    placeholder={priceFetching ? 'Lade…' : '150.00'}
+                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
                   />
                 </div>
               </div>
