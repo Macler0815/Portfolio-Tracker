@@ -71,11 +71,33 @@ function App() {
     setTxModalOpen(true);
   }
 
-  function handleSaveTransaction(t: Omit<Transaction, 'id'> | Transaction) {
-    if ('id' in t) {
-      portfolio.updateTransaction(t);
+  // INTELLIGENTE AUTOMATISCHE TICKER-SUCHE PER ISIN/WKN
+  async function handleSaveTransaction(t: Omit<Transaction, 'id'> | Transaction) {
+    let finalSymbol = t.symbol.trim().toUpperCase();
+    const isIsinOrWkn = finalSymbol.length === 12 || finalSymbol.length === 6;
+
+    if (isIsinOrWkn) {
+      try {
+        const config = await getApiKeyConfig();
+        const apiKey = config?.apiKey || '';
+        if (apiKey) {
+          const response = await fetch(`https://finnhub.io{finalSymbol}&token=${apiKey}`);
+          const searchData = await response.json();
+          if (searchData.result && searchData.result.length > 0) {
+            // Nimm das Symbol des ersten Suchtreffers
+            finalSymbol = searchData.result[0].symbol;
+          }
+        }
+      } catch (e) {
+        console.error("Automatischer Lookup fehlgeschlagen:", e);
+      }
+    }
+
+    const updatedTransaction = { ...t, symbol: finalSymbol };
+    if ('id' in updatedTransaction) {
+      portfolio.updateTransaction(updatedTransaction as Transaction);
     } else {
-      portfolio.addTransaction(t);
+      portfolio.addTransaction(updatedTransaction);
     }
   }
 
@@ -90,7 +112,6 @@ function App() {
       const data: PortfolioExport = await portfolio.exportPortfolio();
       const jsonString = JSON.stringify(data, null, 2);
 
-      // Desktop/Mac: use File System Access API
       if ('showSaveFilePicker' in window) {
         try {
           const handle = await (window as any).showSaveFilePicker({
@@ -113,6 +134,15 @@ function App() {
           }
         }
       }
+
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      setIosBlobUrl(url);
+      setSyncStep('modal');
+    } catch {
+      setSyncStep('idle');
+    }
+  }
 
       // iOS / Safari fallback: show modal with download link
       const blob = new Blob([jsonString], { type: 'application/json' });
