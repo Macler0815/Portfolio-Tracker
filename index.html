@@ -20,13 +20,19 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
 </head>
-  <body>
+  <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased selection:bg-green-500/20">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').catch(() => {});
+          navigator.serviceWorker
+            .register('./sw.js')
+            .then((reg) => {
+              // Proactively check for updated worker
+              reg.update().catch(() => {});
+            })
+            .catch(() => {});
         });
       }
     </script>

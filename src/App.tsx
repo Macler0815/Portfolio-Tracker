@@ -28,10 +28,14 @@ function App() {
   const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
-    getApiKeyConfig().then((c) => setHasApiKey(!!c));
+    getApiKeyConfig()
+      .then((c) => setHasApiKey(!!c))
+      .catch(() => setHasApiKey(false));
   }, [bio.state]);
 
-  const knownBanks = Array.from(new Set(portfolio.transactions.map((t) => t.bank).filter(Boolean))) as string[];
+  const knownBanks = Array.from(
+    new Set((portfolio.transactions || []).map((t) => t?.bank).filter((b): b is string => !!b))
+  );
 
   const unlockedRef = useRef(false);
   unlockedRef.current = bio.state === 'unlocked';
@@ -54,10 +58,10 @@ function App() {
 
   // Auto-refresh on initial unlock
   useEffect(() => {
-    if (bio.state === 'unlocked' && !portfolio.loading && portfolio.transactions.length > 0) {
-      portfolio.refreshPrices(true);
+    if (bio.state === 'unlocked' && !portfolio.loading && portfolio.transactions && portfolio.transactions.length > 0) {
+      refreshPricesRef.current(true);
     }
-  }, [bio.state, portfolio.loading]);
+  }, [bio.state, portfolio.loading, portfolio.transactions]);
 
   const tabs: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -73,7 +77,7 @@ function App() {
 
   // INTELLIGENTE AUTOMATISCHE TICKER-SUCHE PER ISIN
   async function handleSaveTransaction(t: Omit<Transaction, 'id'> | Transaction) {
-    let finalSymbol = t.symbol.trim().toUpperCase();
+    let finalSymbol = (t?.symbol || '').trim().toUpperCase();
     const isIsinOrWkn = finalSymbol.length === 12 || finalSymbol.length === 6;
 
     if (isIsinOrWkn) {
@@ -81,11 +85,15 @@ function App() {
         const config = await getApiKeyConfig();
         const apiKey = config?.apiKey || '';
         if (apiKey) {
-          const response = await fetch(`https://finnhub.io/api/v1/search?q=${finalSymbol}&token=${apiKey}`);
-          const searchData = await response.json();
-          // Korrektur: Greife auf das erste Element im result-Array zu
-          if (searchData.result && searchData.result.length > 0) {
-            finalSymbol = searchData.result[0].symbol;
+          const response = await fetch(`https://finnhub.io/api/v1/search?q=${encodeURIComponent(finalSymbol)}&token=${apiKey}`);
+          if (response.ok) {
+            const searchData = await response.json().catch(() => null);
+            if (searchData && Array.isArray(searchData.result) && searchData.result.length > 0) {
+              const first = searchData.result[0];
+              if (first && (first.symbol || first.displaySymbol)) {
+                finalSymbol = first.symbol || first.displaySymbol;
+              }
+            }
           }
         }
       } catch (e) {
@@ -108,42 +116,56 @@ function App() {
   }
 
   async function handleICloudSync() {
-    setSyncStep('saving');
-    try {
-      const data: PortfolioExport = await portfolio.exportPortfolio();
-      const jsonString = JSON.stringify(data, null, 2);
+  setSyncStep('saving');
+  try {
+    const data: PortfolioExport = await portfolio.exportPortfolio();
+    const jsonString = JSON.stringify(data, null, 2);
 
-      if (window.showSaveFilePicker) {
-        try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: 'portfolio.json',
-            types: [{
-              description: 'JSON File',
-              accept: { 'application/json': ['.json'] },
-            }],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(jsonString);
-          await writable.close();
-          setSyncStep('done');
-          setTimeout(() => setSyncStep('idle'), 2500);
+    // 1. Sichere Prüfung: Nur Chrome/Edge/Desktop-Browser nutzen showSaveFilePicker
+    if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: 'portfolio.json',
+          types: [{
+            description: 'JSON File',
+            accept: { 'application/json': ['.json'] },
+          }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(jsonString);
+        await writable.close();
+        setSyncStep('done');
+        setTimeout(() => setSyncStep('idle'), 2500);
+        return;
+      } catch (err: unknown) {
+        if ((err as Error)?.name === 'AbortError') {
+          setSyncStep('idle');
           return;
-        } catch (err: unknown) {
-          if ((err as Error)?.name === 'AbortError') {
-            setSyncStep('idle');
-            return;
-          }
         }
+        // Bei anderen Fehlern im Picker nicht abstürzen, sondern auf Fallback leiten
       }
-
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
+    }
+  
+    // 2. Absolut sicherer Fallback für iOS (Safari / PWA)
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    // iOS-spezifischer Sicherheits-Check: Falls der State-Wechsel hakt,
+    // stellen wir sicher, dass die URL existiert, bevor das Modal triggert.
+    if (url) {
       setIosBlobUrl(url);
       setSyncStep('modal');
-    } catch {
-      setSyncStep('idle');
+    } else {
+      throw new Error('Blob URL creation failed');
     }
+
+  } catch (error) {
+    console.error("Sync-Fehler abgefangen:", error);
+    setSyncStep('idle');
+    // Verhindert den White Screen, indem der Fehler niemals die App reißt
   }
+}
+
 
   const currentPrices = new Map(portfolio.holdings.map((h) => [h.symbol, h.currentPrice]));
 

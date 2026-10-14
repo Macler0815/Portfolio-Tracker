@@ -14,6 +14,13 @@ import {
 import { fetchQuotes, isCacheValid, getApiKeyConfig } from '@/lib/api';
 import { computeHoldings, computeSummary } from '@/lib/calculations';
 
+function safeRandomId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+}
+
 export function usePortfolio() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [prices, setPrices] = useState<Map<string, { price: number; fetchedAt: number }>>(new Map());
@@ -35,20 +42,20 @@ export function usePortfolio() {
   const loadData = useCallback(async () => {
     try {
       const [txs, cachedPrices, manual] = await Promise.all([
-        getAllTransactions(),
-        getAllPriceQuotes(),
-        getAllManualPrices(),
+        getAllTransactions().catch(() => []),
+        getAllPriceQuotes().catch(() => new Map()),
+        getAllManualPrices().catch(() => new Map()),
       ]);
       if (!mountedRef.current) return;
-      setTransactions(txs.sort((a, b) => b.date.localeCompare(a.date)));
-      setPrices(cachedPrices);
-      setManualPrices(manual);
+      const safeTxs = Array.isArray(txs) ? txs.filter(Boolean) : [];
+      setTransactions(safeTxs.sort((a, b) => ((b && b.date) || '').localeCompare((a && a.date) || '')));
+      setPrices(cachedPrices instanceof Map ? cachedPrices : new Map());
+      setManualPrices(manual instanceof Map ? manual : new Map());
       setLoading(false);
     } catch {
-      if (mountedRef.current) {
-        setError('Fehler beim Laden der Daten');
-        setLoading(false);
-      }
+      if (!mountedRef.current) return;
+      setError('Fehler beim Laden der Daten');
+      setLoading(false);
     }
   }, []);
 
@@ -59,15 +66,22 @@ export function usePortfolio() {
   // Fetch live prices — uses cache, only fetches stale/missing symbols
   const refreshPrices = useCallback(
     async (force = false) => {
-      if (transactions.length === 0) return;
+      if (!transactions || transactions.length === 0) return;
       setRefreshing(true);
       setError(null);
       try {
-        const symbols = Array.from(new Set(transactions.map((t) => t.symbol)));
+        const symbols = Array.from(
+          new Set(
+            transactions
+              .map((t) => t?.symbol)
+              .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+          )
+        );
         const tickerMap = new Map<string, string>();
         for (const t of transactions) {
+          if (!t) continue;
           const ticker = t.ticker || t.yahooTicker;
-          if (ticker) tickerMap.set(t.symbol, ticker);
+          if (ticker && t.symbol) tickerMap.set(t.symbol, ticker);
         }
         const toFetch = force
           ? symbols
@@ -84,7 +98,12 @@ export function usePortfolio() {
           return;
         }
 
-        const config = await getApiKeyConfig();
+        let config = null;
+        try {
+          config = await getApiKeyConfig();
+        } catch {
+          // ignore
+        }
         if (!config) {
           if (mountedRef.current) {
             setRefreshing(false);
@@ -96,15 +115,17 @@ export function usePortfolio() {
         const quotes = await fetchQuotes(toFetch, tickerMap);
         const newPrices = new Map(prices);
         let updatedCount = 0;
-        for (const [symbol, q] of quotes) {
-          newPrices.set(symbol, { price: q.price, fetchedAt: Date.now() });
-          await putPriceQuote({ symbol, price: q.price, fetchedAt: Date.now() });
-          updatedCount++;
+        if (quotes && typeof quotes[Symbol.iterator] === 'function') {
+          for (const [symbol, q] of quotes) {
+            newPrices.set(symbol, { price: q.price, fetchedAt: Date.now() });
+            await putPriceQuote({ symbol, price: q.price, fetchedAt: Date.now() }).catch(() => {});
+            updatedCount++;
+          }
         }
         if (mountedRef.current) {
           setPrices(newPrices);
           setLastRefresh(Date.now());
-          if (quotes.size === 0 && toFetch.length > 0) {
+          if ((!quotes || quotes.size === 0) && toFetch.length > 0) {
             const failedSymbols = toFetch.map((s) => tickerMap.get(s) || s).join(', ');
             const hasCached = toFetch.some((s) => prices.has(s));
             setError(
@@ -113,11 +134,12 @@ export function usePortfolio() {
                 : `Kurse für [${failedSymbols}] konnten nicht geladen werden. Prüfe in den Einstellungen deinen API-Key und ob die Tickersymbole korrekt sind (z.B. EUNL.DE für Xetra-ETFs).`
             );
           } else if (updatedCount < toFetch.length) {
-            const failed = toFetch.filter((s) => !quotes.has(s)).map((s) => tickerMap.get(s) || s).join(', ');
+            const failed = toFetch.filter((s) => !quotes || !quotes.has(s)).map((s) => tickerMap.get(s) || s).join(', ');
             setError(`Kurse für [${failed}] konnten nicht aktualisiert werden — Ticker prüfen oder manuell erfassen`);
           }
         }
-      } catch {
+      } catch (err) {
+        console.error('refreshPrices failed:', err);
         if (mountedRef.current) {
           setError('Kurse konnten nicht abgerufen werden');
         }
@@ -132,6 +154,7 @@ export function usePortfolio() {
   useEffect(() => {
     if (!loading && transactions.length > 0) {
       const needsRefresh = transactions.some((t) => {
+        if (!t?.symbol) return false;
         const cached = prices.get(t.symbol);
         const manual = manualPrices.get(t.symbol);
         return !manual && (!cached || !isCacheValid(cached.fetchedAt));
@@ -147,9 +170,9 @@ export function usePortfolio() {
 
   // CRUD
   const addTransaction = useCallback(async (t: Omit<Transaction, 'id'>) => {
-    const tx = { ...t, id: crypto.randomUUID() };
+    const tx = { ...t, id: safeRandomId() };
     await putTransaction(tx);
-    setTransactions((prev) => [tx, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
+    setTransactions((prev) => [tx, ...prev].sort((a, b) => ((b && b.date) || '').localeCompare((a && a.date) || '')));
   }, []);
 
   const updateTransaction = useCallback(async (t: Transaction) => {

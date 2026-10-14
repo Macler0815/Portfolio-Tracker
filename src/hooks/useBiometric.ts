@@ -45,28 +45,39 @@ export function useBiometric() {
     let cancelled = false;
 
     async function init() {
-      if (!window.PublicKeyCredential) {
-        if (!cancelled) setState('unsupported');
-        return;
-      }
-
       try {
-        const available =
-          await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        if (!available) {
+        if (typeof window === 'undefined' || !window.PublicKeyCredential) {
           if (!cancelled) setState('unsupported');
           return;
         }
-      } catch {
-        if (!cancelled) {
-          setState('unsupported');
-          return;
-        }
-      }
 
-      const registered = localStorage.getItem(REGISTERED_KEY);
-      if (!cancelled) {
-        setState(registered ? 'locked' : 'unregistered');
+        try {
+          const available =
+            await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          if (!available) {
+            if (!cancelled) setState('unsupported');
+            return;
+          }
+        } catch {
+          if (!cancelled) {
+            setState('unsupported');
+            return;
+          }
+        }
+
+        let registered: string | null = null;
+        try {
+          registered = localStorage.getItem(REGISTERED_KEY);
+        } catch {
+          // localStorage disabled or restricted in private browsing
+        }
+
+        if (!cancelled) {
+          setState(registered ? 'locked' : 'unregistered');
+        }
+      } catch (err) {
+        console.warn('Biometric init exception:', err);
+        if (!cancelled) setState('unsupported');
       }
     }
 
@@ -80,7 +91,9 @@ export function useBiometric() {
     setBusy(true);
     setError(null);
     try {
-      const userId = crypto.randomUUID();
+      const userId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : 'user_' + Date.now();
       const credential = (await navigator.credentials.create({
         publicKey: {
           challenge: randomChallenge(),

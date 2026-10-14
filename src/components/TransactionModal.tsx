@@ -99,7 +99,17 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     }
   }, [open, editing]);
 
+  // Clean up all timers on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+      if (priceTimer.current) clearTimeout(priceTimer.current);
+      if (isinTimer.current) clearTimeout(isinTimer.current);
+    };
+  }, []);
+
   const performLookup = useCallback(async (query: string, explicit = false) => {
+    if (!query || typeof query !== 'string') return;
     const clean = query.trim().toUpperCase();
     if (!clean || clean.length < 5) return;
 
@@ -112,7 +122,13 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     setIsinLookingUp(true);
     setLookupFeedback(null);
 
-    const config = await getApiKeyConfig();
+    let config = null;
+    try {
+      config = await getApiKeyConfig();
+    } catch (err) {
+      console.warn('Failed to get API config:', err);
+    }
+
     if (!config?.apiKey) {
       if (explicit || clean.length === 12) {
         setLookupFeedback({
@@ -127,7 +143,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     setPriceFetching(true);
     try {
       const result = await lookupSecurityByIsin(clean);
-      if (result && (result.symbol || result.name || result.price)) {
+      if (result && (result.symbol || result.name || (typeof result.price === 'number' && result.price > 0))) {
         // 1. "Symbol / Ticker": Replace typed ISIN with actual fetched Finnhub ticker (e.g. 'IKOR.L')
         if (result.symbol) {
           setSymbol(result.symbol);
@@ -149,14 +165,15 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
         if (typeof result.price === 'number' && result.price > 0) {
           setPrice(result.price.toString());
           setPriceFetched(true);
+          const formattedPrice = result.price.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           setLookupFeedback({
             type: 'success',
-            text: `Finnhub: ${result.name || result.symbol} (${result.symbol}) gefunden · Live-Kurs: ${result.price.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € eingetragen`,
+            text: `Finnhub: ${result.name || result.symbol || clean} (${result.symbol || clean}) gefunden · Live-Kurs: ${formattedPrice} € eingetragen`,
           });
         } else {
           setLookupFeedback({
             type: 'success',
-            text: `Finnhub: ${result.name || result.symbol} (${result.symbol}) gefunden · Bitte Kurs manuell eingeben.`,
+            text: `Finnhub: ${result.name || result.symbol || clean} (${result.symbol || clean}) gefunden · Bitte Kurs manuell eingeben.`,
           });
         }
       } else {
@@ -171,7 +188,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
           });
         }
       }
-    } catch {
+    } catch (err) {
+      console.error('Lookup failed in modal:', err);
       // Keep typed ISIN and allow manual entry
       if (clean.length === 12) {
         setIsin(clean);
@@ -189,6 +207,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   }, []);
 
   function handleIsinChange(val: string) {
+    if (typeof val !== 'string') return;
     const clean = val.toUpperCase().trim();
     setIsin(clean);
 
@@ -208,6 +227,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   }
 
   function handleSymbolChange(val: string) {
+    if (typeof val !== 'string') return;
     const clean = val.toUpperCase().trim();
     setSymbol(clean);
 
@@ -228,6 +248,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   }
 
   function handleWknChange(val: string) {
+    if (typeof val !== 'string') return;
     const clean = val.toUpperCase().trim();
     setWkn(clean);
 
@@ -239,9 +260,9 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     }
   }
 
-  // Debounced search
+  // Debounced search (only when modal is open and in search step)
   useEffect(() => {
-    if (step !== 'search') return;
+    if (!open || step !== 'search') return;
     if (searchTimer.current) clearTimeout(searchTimer.current);
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -249,20 +270,25 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     }
     setSearching(true);
     searchTimer.current = setTimeout(async () => {
-      const results = await searchSymbol(searchQuery);
-      setSearchResults(results);
-      setSearching(false);
+      try {
+        const results = await searchSymbol(searchQuery);
+        setSearchResults(Array.isArray(results) ? results : []);
+      } catch (err) {
+        console.error('Search error in modal:', err);
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
     }, 350);
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
-  }, [searchQuery, step]);
+  }, [searchQuery, step, open]);
 
-  // Auto-fetch current price when symbol changes (details step, not editing)
+  // Auto-fetch current price when symbol changes (details step, only when open and not editing)
   useEffect(() => {
-    if (step !== 'details') return;
-    if (editing) return;
-    if (!symbol.trim()) return;
+    if (!open || step !== 'details' || editing) return;
+    if (!symbol || !symbol.trim()) return;
     if (isinLookingUp) return;
     // Don't refetch if user already has a price and is editing it manually
     if (priceFetched && price) return;
@@ -272,24 +298,30 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     if (priceTimer.current) clearTimeout(priceTimer.current);
     setPriceFetching(true);
     priceTimer.current = setTimeout(async () => {
-      const quote = await fetchSingleQuote(symbol);
-      if (quote && quote.price > 0) {
-        setPrice(quote.price.toString());
-        setPriceFetched(true);
+      try {
+        const quote = await fetchSingleQuote(symbol);
+        if (quote && typeof quote.price === 'number' && quote.price > 0) {
+          setPrice(quote.price.toString());
+          setPriceFetched(true);
+        }
+      } catch (err) {
+        console.error('Quote error in modal:', err);
+      } finally {
+        setPriceFetching(false);
       }
-      setPriceFetching(false);
     }, 600);
     return () => {
       if (priceTimer.current) clearTimeout(priceTimer.current);
     };
-  }, [symbol, step, editing, priceFetched, price, isinLookingUp]);
+  }, [symbol, step, editing, priceFetched, price, isinLookingUp, open]);
 
-  // Focus first input on details step
+  // Focus first input on details step only when open
   useEffect(() => {
-    if (step === 'details' && !editing) {
-      setTimeout(() => firstInputRef.current?.focus(), 100);
+    if (open && step === 'details' && !editing) {
+      const t = setTimeout(() => firstInputRef.current?.focus(), 100);
+      return () => clearTimeout(t);
     }
-  }, [step, editing]);
+  }, [step, editing, open]);
 
   if (!open) return null;
 

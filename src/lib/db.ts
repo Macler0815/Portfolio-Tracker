@@ -12,25 +12,36 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(TX_STORE)) {
-        const s = db.createObjectStore(TX_STORE, { keyPath: 'id' });
-        s.createIndex('symbol', 'symbol', { unique: false });
-      }
-      if (!db.objectStoreNames.contains(PRICE_STORE)) {
-        db.createObjectStore(PRICE_STORE, { keyPath: 'symbol' });
-      }
-      if (!db.objectStoreNames.contains(MANUAL_STORE)) {
-        db.createObjectStore(MANUAL_STORE, { keyPath: 'symbol' });
-      }
-      if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
-        db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    try {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(TX_STORE)) {
+          const s = db.createObjectStore(TX_STORE, { keyPath: 'id' });
+          s.createIndex('symbol', 'symbol', { unique: false });
+        }
+        if (!db.objectStoreNames.contains(PRICE_STORE)) {
+          db.createObjectStore(PRICE_STORE, { keyPath: 'symbol' });
+        }
+        if (!db.objectStoreNames.contains(MANUAL_STORE)) {
+          db.createObjectStore(MANUAL_STORE, { keyPath: 'symbol' });
+        }
+        if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
+          db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => {
+        dbPromise = null;
+        reject(req.error);
+      };
+      req.onblocked = () => {
+        console.warn('IndexedDB blocked by other tabs or processes');
+      };
+    } catch (err) {
+      dbPromise = null;
+      reject(err);
+    }
   });
   return dbPromise;
 }

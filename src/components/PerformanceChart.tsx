@@ -15,7 +15,12 @@ interface Point {
 
 export function PerformanceChart({ transactions, currentPrices, height = 200 }: PerformanceChartProps) {
   const { points, maxValue, minValue } = useMemo(() => {
-    const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+    if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
+      return { points: [] as Point[], maxValue: 0, minValue: 0 };
+    }
+    const sorted = [...transactions]
+      .filter((t) => t && typeof t.date === 'string')
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     if (sorted.length === 0) return { points: [] as Point[], maxValue: 0, minValue: 0 };
 
     const pts: Point[] = [];
@@ -23,37 +28,50 @@ export function PerformanceChart({ transactions, currentPrices, height = 200 }: 
     const quantities = new Map<string, number>();
 
     for (const t of sorted) {
+      const q = typeof t.quantity === 'number' && !isNaN(t.quantity) ? t.quantity : 0;
+      const p = typeof t.price === 'number' && !isNaN(t.price) ? t.price : 0;
       if (t.type === 'buy') {
-        invested += t.quantity * t.price + (t.fee || 0);
-        quantities.set(t.symbol, (quantities.get(t.symbol) || 0) + t.quantity);
+        invested += q * p + (t.fee || 0);
+        quantities.set(t.symbol, (quantities.get(t.symbol) || 0) + q);
       } else {
-        const sold = Math.min(t.quantity, quantities.get(t.symbol) || 0);
-        invested -= sold * (invested / Math.max(0.0001, [...quantities.values()].reduce((a, b) => a + b, 0)));
-        quantities.set(t.symbol, (quantities.get(t.symbol) || 0) - sold);
+        const currentQty = quantities.get(t.symbol) || 0;
+        const sold = Math.min(q, currentQty);
+        const totalQty = [...quantities.values()].reduce((a, b) => a + b, 0);
+        if (totalQty > 0.0001) {
+          invested -= sold * (invested / totalQty);
+        }
+        quantities.set(t.symbol, Math.max(0, currentQty - sold));
       }
       let value = 0;
       for (const [sym, qty] of quantities) {
-        const price = currentPrices.get(sym);
-        value += price ? qty * price : qty * (sorted.find((x) => x.symbol === sym)?.price || 0);
+        const curPrice = currentPrices?.get(sym);
+        const fallbackPrice = sorted.find((x) => x.symbol === sym)?.price || 0;
+        const validPrice = typeof curPrice === 'number' && !isNaN(curPrice) ? curPrice : fallbackPrice;
+        value += qty * validPrice;
       }
-      pts.push({ date: t.date, invested, value });
+      pts.push({ date: t.date, invested: Math.max(0, invested), value: Math.max(0, value) });
     }
 
     // Add current point
     let currentValue = 0;
     for (const [sym, qty] of quantities) {
-      const price = currentPrices.get(sym);
-      if (price) currentValue += qty * price;
+      const curPrice = currentPrices?.get(sym);
+      if (typeof curPrice === 'number' && !isNaN(curPrice)) {
+        currentValue += qty * curPrice;
+      }
     }
     if (currentValue > 0 || pts.length > 0) {
-      pts.push({ date: new Date().toISOString().slice(0, 10), invested, value: currentValue || invested });
+      pts.push({ date: new Date().toISOString().slice(0, 10), invested: Math.max(0, invested), value: currentValue || invested });
     }
 
-    const allVals = pts.flatMap((p) => [p.value, p.invested]);
+    const allVals = pts
+      .flatMap((p) => [p.value, p.invested])
+      .filter((v) => typeof v === 'number' && !isNaN(v) && isFinite(v));
+
     return {
       points: pts,
-      maxValue: Math.max(...allVals, 1),
-      minValue: Math.min(...allVals, 0),
+      maxValue: allVals.length > 0 ? Math.max(...allVals, 1) : 1,
+      minValue: allVals.length > 0 ? Math.min(...allVals, 0) : 0,
     };
   }, [transactions, currentPrices]);
 
