@@ -90,7 +90,7 @@ function App() {
       const data: PortfolioExport = await portfolio.exportPortfolio();
       const jsonString = JSON.stringify(data, null, 2);
 
-      // Weg 1: Prüfe auf die moderne File System Access API (für Desktop/Mac)
+      // Desktop/Mac: use File System Access API
       if ('showSaveFilePicker' in window) {
         try {
           const handle = await (window as any).showSaveFilePicker({
@@ -114,7 +114,7 @@ function App() {
         }
       }
 
-      // iOS / Safari Fallback: Bereite ein strukturiertes Dialogfenster vor
+      // iOS / Safari fallback: show modal with download link
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       setIosBlobUrl(url);
@@ -185,7 +185,7 @@ function App() {
         />
       )}
 
-      {/* iOS iCloud Sync Modal Dialog */}
+      {/* iOS iCloud Sync Modal */}
       {syncStep === 'modal' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 dark:border-gray-800">
@@ -193,7 +193,7 @@ function App() {
               <Download size={28} />
               <h3 className="text-lg font-bold text-gray-900 dark:text-white">Backup in iCloud sichern</h3>
             </div>
-            
+
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-5 leading-relaxed">
               Deine aktuellen Portfoliodaten sind bereit. Tippe unten auf den Button, um den Speicherort (deinen iCloud-Ordner) selbst auszuwählen.
             </p>
@@ -251,39 +251,44 @@ function App() {
           {tabs.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
-return (
-<button
-key={t.id}
-onClick={() => setTab(t.id)}
-className={flex flex-col items-center gap-0.5 py-2 px-3 transition-colors ${ active ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500' }}
->
-<Icon size={22} strokeWidth={active ? 2.5 : 2} />
-{t.label}
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex flex-col items-center gap-0.5 py-2 px-3 transition-colors ${
+                  active ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'
+                }`}
+              >
+                <Icon size={22} strokeWidth={active ? 2.5 : 2} />
+                <span className="text-[10px] font-medium">{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
-);
-})}
-
-<TransactionModal
-open={txModalOpen}
-editing={editingTx}
-onClose={() => {
-setTxModalOpen(false);
-setEditingTx(null);
-}}
-onSave={handleSaveTransaction}
-knownBanks={knownBanks}
-/>
-<PriceEditModal
-open={priceModalOpen}
-holding={priceHolding}
-onClose={() => {
-setPriceModalOpen(false);
-setPriceHolding(null);
-}}
-onSave={portfolio.setManualPrice}
-onRemove={portfolio.removeManualPrice}
-/>
-
-);
+      <TransactionModal
+        open={txModalOpen}
+        editing={editingTx}
+        onClose={() => {
+          setTxModalOpen(false);
+          setEditingTx(null);
+        }}
+        onSave={handleSaveTransaction}
+        knownBanks={knownBanks}
+      />
+      <PriceEditModal
+        open={priceModalOpen}
+        holding={priceHolding}
+        onClose={() => {
+          setPriceModalOpen(false);
+          setPriceHolding(null);
+        }}
+        onSave={portfolio.setManualPrice}
+        onRemove={portfolio.removeManualPrice}
+      />
+    </div>
+  );
 }
+
 export default App;
