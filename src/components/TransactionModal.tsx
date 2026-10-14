@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import { Search, X, Check, Loader2, Building2, TrendingUp } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Search, X, Check, Loader2, Building2, TrendingUp, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { Transaction, TransactionType, AssetType } from '@/lib/types';
-import { searchSymbol, fetchSingleQuote, type SearchResult } from '@/lib/api';
+import {
+  searchSymbol,
+  fetchSingleQuote,
+  lookupSecurityByIsin,
+  extractWknFromIsin,
+  getApiKeyConfig,
+  type SearchResult,
+} from '@/lib/api';
 import { todayISO } from '@/lib/format';
 
 interface TransactionModalProps {
@@ -35,8 +42,15 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   const [wkn, setWkn] = useState('');
   const [bank, setBank] = useState('');
 
+  const [isinLookingUp, setIsinLookingUp] = useState(false);
+  const [lookupFeedback, setLookupFeedback] = useState<{
+    type: 'success' | 'error' | 'info';
+    text: string;
+  } | null>(null);
+
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const priceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isinTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   // Reset or load editing transaction
@@ -60,8 +74,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setWkn(parts[1] || '');
       setBank(editing.bank || '');
       setPriceFetched(true);
+      setLookupFeedback(null);
+      setIsinLookingUp(false);
     } else {
-      setStep('search');
+      setStep('details');
       setSelected(null);
       setSearchQuery('');
       setSearchResults([]);
@@ -78,8 +94,150 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setIsin('');
       setWkn('');
       setBank('');
+      setLookupFeedback(null);
+      setIsinLookingUp(false);
     }
   }, [open, editing]);
+
+  const performLookup = useCallback(async (query: string, explicit = false) => {
+    const clean = query.trim().toUpperCase();
+    if (!clean || clean.length < 5) return;
+
+    // Immediately deduce German WKN if applicable
+    const immediateWkn = extractWknFromIsin(clean);
+    if (immediateWkn) {
+      setWkn((prev) => prev || immediateWkn);
+    }
+
+    setIsinLookingUp(true);
+    setLookupFeedback(null);
+
+    const config = await getApiKeyConfig();
+    if (!config?.apiKey) {
+      if (explicit || clean.length === 12) {
+        setLookupFeedback({
+          type: 'info',
+          text: 'Kein API-Key hinterlegt. Bitte erstelle unter Einstellungen einen kostenlosen Finnhub-Key für automatische Live-Kurse.',
+        });
+      }
+      setIsinLookingUp(false);
+      return;
+    }
+
+    setPriceFetching(true);
+    try {
+      const result = await lookupSecurityByIsin(clean);
+      if (result && (result.symbol || result.name || result.price)) {
+        // 1. "Symbol / Ticker": Replace typed ISIN with actual fetched Finnhub ticker (e.g. 'IKOR.L')
+        if (result.symbol) {
+          setSymbol(result.symbol);
+        }
+        if (clean.length === 12) {
+          setIsin(clean);
+        }
+        // 2. "Name": Asset Name
+        if (result.name) {
+          setName(result.name);
+        }
+        if (result.wkn) {
+          setWkn(result.wkn);
+        }
+        if (result.assetType) {
+          setAssetType(result.assetType);
+        }
+        // 3. "Current Price" / "Price": Live price
+        if (typeof result.price === 'number' && result.price > 0) {
+          setPrice(result.price.toString());
+          setPriceFetched(true);
+          setLookupFeedback({
+            type: 'success',
+            text: `Finnhub: ${result.name || result.symbol} (${result.symbol}) gefunden · Live-Kurs: ${result.price.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € eingetragen`,
+          });
+        } else {
+          setLookupFeedback({
+            type: 'success',
+            text: `Finnhub: ${result.name || result.symbol} (${result.symbol}) gefunden · Bitte Kurs manuell eingeben.`,
+          });
+        }
+      } else {
+        // 4. If API fails or doesn't find the ISIN, keep typed ISIN and let user fill out name and price manually
+        if (clean.length === 12) {
+          setIsin(clean);
+        }
+        if (explicit || clean.length === 12) {
+          setLookupFeedback({
+            type: 'info',
+            text: `Keine Daten für ISIN "${clean}" bei Finnhub gefunden. Du kannst Name und Kurs manuell eintragen.`,
+          });
+        }
+      }
+    } catch {
+      // Keep typed ISIN and allow manual entry
+      if (clean.length === 12) {
+        setIsin(clean);
+      }
+      if (explicit || clean.length === 12) {
+        setLookupFeedback({
+          type: 'error',
+          text: 'Finnhub-Abfrage fehlgeschlagen. Du kannst Name und Kurs manuell eintragen.',
+        });
+      }
+    } finally {
+      setIsinLookingUp(false);
+      setPriceFetching(false);
+    }
+  }, []);
+
+  function handleIsinChange(val: string) {
+    const clean = val.toUpperCase().trim();
+    setIsin(clean);
+
+    const extracted = extractWknFromIsin(clean);
+    if (extracted && !wkn) {
+      setWkn(extracted);
+    }
+
+    if (isinTimer.current) clearTimeout(isinTimer.current);
+
+    // If 12-char ISIN entered, auto-query Finnhub
+    if (clean.length === 12) {
+      isinTimer.current = setTimeout(() => {
+        performLookup(clean, false);
+      }, 300);
+    }
+  }
+
+  function handleSymbolChange(val: string) {
+    const clean = val.toUpperCase().trim();
+    setSymbol(clean);
+
+    // If user enters a 12-char ISIN into the Symbol / Ticker field
+    const isIsin = clean.length === 12 && /^[A-Z]{2}[A-Z0-9]{10}$/.test(clean);
+
+    if (isIsin) {
+      setIsin(clean);
+      const extracted = extractWknFromIsin(clean);
+      if (extracted && !wkn) {
+        setWkn(extracted);
+      }
+      if (isinTimer.current) clearTimeout(isinTimer.current);
+      isinTimer.current = setTimeout(() => {
+        performLookup(clean, false);
+      }, 300);
+    }
+  }
+
+  function handleWknChange(val: string) {
+    const clean = val.toUpperCase().trim();
+    setWkn(clean);
+
+    if (clean.length === 6 && !symbol && !isin) {
+      if (isinTimer.current) clearTimeout(isinTimer.current);
+      isinTimer.current = setTimeout(() => {
+        performLookup(clean, false);
+      }, 400);
+    }
+  }
 
   // Debounced search
   useEffect(() => {
@@ -105,8 +263,11 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     if (step !== 'details') return;
     if (editing) return;
     if (!symbol.trim()) return;
+    if (isinLookingUp) return;
     // Don't refetch if user already has a price and is editing it manually
     if (priceFetched && price) return;
+    // Skip if symbol is still an ISIN (will be resolved by ISIN lookup)
+    if (symbol.length === 12 && /^[A-Z]{2}[A-Z0-9]{10}$/.test(symbol)) return;
 
     if (priceTimer.current) clearTimeout(priceTimer.current);
     setPriceFetching(true);
@@ -121,7 +282,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     return () => {
       if (priceTimer.current) clearTimeout(priceTimer.current);
     };
-  }, [symbol, step, editing]);
+  }, [symbol, step, editing, priceFetched, price, isinLookingUp]);
 
   // Focus first input on details step
   useEffect(() => {
@@ -139,6 +300,14 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     setAssetType(r.type === 'etf' ? 'etf' : 'stock');
     setPriceFetched(false);
     setPrice('');
+    setLookupFeedback(null);
+
+    const cleanQuery = searchQuery.trim().toUpperCase();
+    if (cleanQuery.length === 12 && /^[A-Z]{2}[A-Z0-9]{10}$/.test(cleanQuery)) {
+      setIsin(cleanQuery);
+      const extracted = extractWknFromIsin(cleanQuery);
+      if (extracted) setWkn(extracted);
+    }
     setStep('details');
   }
 
@@ -149,7 +318,17 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     setName('');
     setPriceFetched(false);
     setPrice('');
+    setLookupFeedback(null);
     setStep('details');
+
+    if (input.length === 12 && /^[A-Z]{2}[A-Z0-9]{10}$/.test(input)) {
+      setIsin(input);
+      const extracted = extractWknFromIsin(input);
+      if (extracted) setWkn(extracted);
+      setTimeout(() => {
+        performLookup(input, true);
+      }, 100);
+    }
   }
 
   function handleSave() {
@@ -194,9 +373,27 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
         <div className="sticky top-0 bg-white dark:bg-gray-900 pt-3 pb-2 z-10">
           <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-700 mx-auto mb-2" />
           <div className="flex items-center justify-between px-5">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {editing ? 'Transaktion bearbeiten' : step === 'search' ? 'Wertpapier suchen' : 'Neue Transaktion'}
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {editing ? 'Transaktion bearbeiten' : 'Neue Transaktion'}
+              </h2>
+              {!editing && (
+                <button
+                  type="button"
+                  onClick={() => setStep(step === 'details' ? 'search' : 'details')}
+                  className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/40 px-2.5 py-1 rounded-lg font-medium flex items-center gap-1 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+                >
+                  {step === 'details' ? (
+                    <>
+                      <Search size={12} />
+                      <span>Wertpapier-Suche</span>
+                    </>
+                  ) : (
+                    <span>Direkt-Formular</span>
+                  )}
+                </button>
+              )}
+            </div>
             <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
               <X size={20} className="text-gray-500 dark:text-gray-400" />
             </button>
@@ -326,61 +523,149 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
 
               {/* Symbol / Ticker (required) */}
               <div>
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
-                  Symbol / Ticker <span className="text-red-500">*</span>
-                </label>
-                <input
-                  ref={firstInputRef}
-                  type="text"
-                  value={symbol}
-                  onChange={(e) => {
-                    setSymbol(e.target.value.toUpperCase());
-                    setPriceFetched(false);
-                    setPrice('');
-                  }}
-                  placeholder="z.B. AAPL oder EUNL.DE"
-                  className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block">
+                    Symbol / Ticker <span className="text-red-500">*</span>
+                  </label>
+                  {isinLookingUp ? (
+                    <span className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 font-medium animate-pulse">
+                      <Loader2 size={13} className="animate-spin text-green-600 dark:text-green-400" />
+                      <span>Finnhub lädt Daten…</span>
+                    </span>
+                  ) : priceFetched && price && symbol ? (
+                    <span className="flex items-center gap-1 text-[11px] text-green-600 dark:text-green-400 font-medium">
+                      <CheckCircle2 size={12} />
+                      <span>Finnhub-Daten geladen</span>
+                    </span>
+                  ) : null}
+                </div>
+                <div className="relative">
+                  <input
+                    ref={firstInputRef}
+                    type="text"
+                    value={symbol}
+                    onChange={(e) => handleSymbolChange(e.target.value)}
+                    onBlur={() => {
+                      const clean = symbol.toUpperCase().trim();
+                      if (clean.length === 12 && /^[A-Z]{2}[A-Z0-9]{10}$/.test(clean)) {
+                        performLookup(clean, false);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const clean = symbol.toUpperCase().trim();
+                        if (clean.length === 12 && /^[A-Z]{2}[A-Z0-9]{10}$/.test(clean)) {
+                          e.preventDefault();
+                          performLookup(clean, true);
+                        }
+                      }
+                    }}
+                    placeholder="Ticker oder ISIN (z.B. AAPL, IKOR.L, IE0008471009)"
+                    className={`w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono ${
+                      isinLookingUp ? 'pr-10 ring-1 ring-green-500/50' : ''
+                    }`}
+                  />
+                  {isinLookingUp && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 font-sans font-medium">
+                      <Loader2 size={15} className="animate-spin text-green-600 dark:text-green-400" />
+                    </div>
+                  )}
+                </div>
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                  Tipp für ETFs: Nutze das Tickersymbol mit Endung, z.B. &apos;EUNL.DE&apos; für den iShares MSCI World (Xetra) oder &apos;VUSA.DE&apos; für S&amp;P 500.
+                  Tippe einen Ticker ein oder gib eine 12-stellige ISIN ein — Finnhub ersetzt die ISIN automatisch durch den Ticker und füllt Name &amp; Live-Kurs aus.
                 </p>
               </div>
 
-              {/* ISIN / WKN (optional, documentation only) */}
-              <div>
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
-                  ISIN / WKN <span className="text-gray-400 font-normal">(optional)</span>
-                </label>
+              {/* ISIN / WKN mit Finnhub Live-Abfrage */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block">
+                    ISIN &amp; WKN <span className="text-gray-400 font-normal">(Live-Datenabfrage)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => performLookup(isin || symbol, true)}
+                    disabled={isinLookingUp || (!isin.trim() && !symbol.trim())}
+                    className="flex items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isinLookingUp ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" />
+                        Finnhub fragt ab…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={12} />
+                        Finnhub Live-Abfrage
+                      </>
+                    )}
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
-                  <input
-                    type="text"
-                    value={isin}
-                    onChange={(e) => setIsin(e.target.value.toUpperCase())}
-                    placeholder="IE00B4L5Y983"
-                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={isin}
+                      onChange={(e) => handleIsinChange(e.target.value)}
+                      placeholder="ISIN (z.B. IE00B4L5Y983)"
+                      maxLength={12}
+                      className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono tracking-wider text-xs"
+                    />
+                    {isinLookingUp && (
+                      <Loader2 size={13} className="animate-spin text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2" />
+                    )}
+                  </div>
                   <span className="text-gray-400 dark:text-gray-500 text-sm font-medium">-</span>
                   <input
                     type="text"
                     value={wkn}
-                    onChange={(e) => setWkn(e.target.value.toUpperCase())}
-                    placeholder="A1JX51"
-                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
+                    onChange={(e) => handleWknChange(e.target.value)}
+                    placeholder="WKN (z.B. A1JX52)"
+                    maxLength={6}
+                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono tracking-wider text-xs"
                   />
                 </div>
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                  Nur zur Dokumentation — wird nicht für die Kursabfrage verwendet.
+
+                <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                  Sobald eine 12-stellige ISIN eingegeben wird, ermittelt Finnhub Ticker, Name, WKN und den aktuellen Live-Kurs automatisch.
                 </p>
+
+                {lookupFeedback && (
+                  <div
+                    className={`flex items-start gap-2 p-2.5 rounded-xl text-xs transition-all ${
+                      lookupFeedback.type === 'success'
+                        ? 'bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/60'
+                        : lookupFeedback.type === 'error'
+                        ? 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/60'
+                        : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60'
+                    }`}
+                  >
+                    {lookupFeedback.type === 'success' && <CheckCircle2 size={15} className="shrink-0 mt-0.5 text-green-600 dark:text-green-400" />}
+                    {lookupFeedback.type === 'error' && <AlertCircle size={15} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />}
+                    {lookupFeedback.type === 'info' && <AlertCircle size={15} className="shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />}
+                    <span className="flex-1">{lookupFeedback.text}</span>
+                    <button
+                      type="button"
+                      onClick={() => setLookupFeedback(null)}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Wertpapiername */}
               <div>
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Wertpapiername</label>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
+                  Name (Asset Name)
+                </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="z.B. Apple Inc. oder iShares MSCI World"
+                  placeholder="z.B. Apple Inc. oder iShares Core FTSE 100"
                   className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
                 />
               </div>
@@ -388,9 +673,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
               {/* Quantity & Price */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Stückzahl</label>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Stückzahl <span className="text-red-500">*</span></label>
                   <input
                     type="number"
+                    step="any"
                     inputMode="decimal"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
@@ -399,13 +685,21 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1 flex items-center gap-1.5">
-                    Kurs in €
-                    {priceFetching && <Loader2 size={12} className="animate-spin text-gray-400" />}
-                    {priceFetched && !priceFetching && price && <TrendingUp size={12} className="text-green-500" />}
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      Kurs / Preis in € <span className="text-red-500">*</span>
+                      {priceFetching && <Loader2 size={12} className="animate-spin text-gray-400" />}
+                    </span>
+                    {priceFetched && !priceFetching && price && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded-md">
+                        <TrendingUp size={10} />
+                        Live-Kurs
+                      </span>
+                    )}
                   </label>
                   <input
                     type="number"
+                    step="any"
                     inputMode="decimal"
                     value={price}
                     onChange={(e) => { setPrice(e.target.value); setPriceFetched(true); }}

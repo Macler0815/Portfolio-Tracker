@@ -1,4 +1,4 @@
-import type { Transaction, Holding, PortfolioSummary, AssetType } from './types';
+import type { Transaction, Holding, PortfolioSummary } from './types';
 
 export function computeHoldings(transactions: Transaction[], prices: Map<string, { price: number; fetchedAt: number }>, manualPrices: Map<string, { price: number; setAt: number }>): Holding[] {
   const map = new Map<string, Holding>();

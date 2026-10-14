@@ -15,6 +15,7 @@ export interface Transaction {
   bank?: string;
   note?: string;
   ticker?: string;
+  yahooTicker?: string;
   isin?: string;
 }
 

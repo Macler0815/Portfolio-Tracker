@@ -66,7 +66,7 @@ export function usePortfolio() {
         const symbols = Array.from(new Set(transactions.map((t) => t.symbol)));
         const tickerMap = new Map<string, string>();
         for (const t of transactions) {
-          const ticker = t.ticker || (t as any).yahooTicker;
+          const ticker = t.ticker || t.yahooTicker;
           if (ticker) tickerMap.set(t.symbol, ticker);
         }
         const toFetch = force

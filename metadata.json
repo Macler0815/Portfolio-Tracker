@@ -1,0 +1,7 @@
+{
+  "name": "Portfolio Tracker",
+  "description": "Track dein globales Aktien- und ETF-Portfolio",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

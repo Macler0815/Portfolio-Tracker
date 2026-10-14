@@ -68,7 +68,7 @@ async function finnhubSearch(query: string, apiKey: string): Promise<SearchResul
     const res = await fetchWithTimeout(url, 8000);
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.result || []).map((r: any) => ({
+    return (data.result || []).map((r: { symbol: string; description?: string; exchange?: string; type?: string }) => ({
       symbol: r.symbol,
       name: r.description || r.symbol,
       exchange: r.exchange || '',
@@ -89,10 +89,13 @@ async function finnhubQuotes(symbols: string[], apiKey: string): Promise<Map<str
       const res = await fetchWithTimeout(url, 8000);
       if (!res.ok) continue;
       const data = await res.json();
-      if (data.c && data.c > 0) {
+      const p = typeof data.c === 'number' && data.c > 0
+        ? data.c
+        : (typeof data.pc === 'number' && data.pc > 0 ? data.pc : 0);
+      if (p > 0) {
         result.set(symbol, {
           symbol,
-          price: data.c,
+          price: p,
           currency: 'USD',
           name: symbol,
           exchange: '',
@@ -116,7 +119,7 @@ async function twelveDataSearch(query: string, apiKey: string): Promise<SearchRe
     if (!res.ok) return [];
     const data = await res.json();
     const matches = data.data || [];
-    return matches.map((m: any) => ({
+    return matches.map((m: { symbol: string; instrument_name?: string; exchange?: string; instrument_type?: string }) => ({
       symbol: m.symbol,
       name: m.instrument_name || m.symbol,
       exchange: m.exchange || '',
@@ -261,3 +264,123 @@ export function isCacheValid(fetchedAt: number): boolean {
 }
 
 export const CACHE_TTL_MS = CACHE_TTL;
+
+export interface IsinLookupResult {
+  symbol: string;
+  name: string;
+  wkn?: string;
+  price?: number;
+  assetType?: 'stock' | 'etf';
+}
+
+export function extractWknFromIsin(isin: string): string {
+  const clean = isin.trim().toUpperCase();
+  if (clean.startsWith('DE') && clean.length === 12) {
+    if (clean.startsWith('DE000')) {
+      return clean.substring(5, 11);
+    }
+    return clean.substring(2, 8);
+  }
+  return '';
+}
+
+export async function lookupSecurityByIsin(rawQuery: string): Promise<IsinLookupResult | null> {
+  const query = rawQuery.trim().toUpperCase();
+  if (!query || query.length < 5) return null;
+
+  const isGermanIsin = query.startsWith('DE') && query.length === 12;
+  const derivedWkn = isGermanIsin ? extractWknFromIsin(query) : (query.length === 6 ? query : '');
+
+  const config = await getApiKeyConfig();
+  const apiKey = config?.apiKey;
+
+  if (!apiKey) {
+    // If no API key configured, we can still return extracted WKN
+    return derivedWkn ? { symbol: query, name: '', wkn: derivedWkn } : null;
+  }
+
+  try {
+    let resolvedSymbol = '';
+    let resolvedName = '';
+    let assetType: 'stock' | 'etf' = 'stock';
+
+    if (config.provider === 'finnhub') {
+      const searchUrl = `https://finnhub.io/api/v1/search?q=${encodeURIComponent(query)}&token=${apiKey}`;
+      const searchRes = await fetchWithTimeout(searchUrl, 8000);
+      let results: { symbol?: string; displaySymbol?: string; description?: string; type?: string }[] = [];
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        results = searchData.result || [];
+        if (results.length > 0) {
+          const primary = results[0];
+          resolvedSymbol = primary.symbol || primary.displaySymbol || '';
+          resolvedName = primary.description || '';
+          if (primary.type && (primary.type.toUpperCase() === 'ETF' || primary.type.toUpperCase().includes('ETF'))) {
+            assetType = 'etf';
+          }
+        }
+      }
+
+      // If no results found by Finnhub
+      if (!resolvedSymbol && results.length === 0) {
+        return null;
+      }
+
+      let livePrice: number | undefined;
+      const candidates: string[] = [resolvedSymbol, query].filter(Boolean);
+      for (const r of results.slice(1, 4)) {
+        const s = r.symbol || r.displaySymbol;
+        if (s && !candidates.includes(s)) {
+          candidates.push(s);
+        }
+      }
+
+      for (const sym of candidates) {
+        try {
+          const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
+          const quoteRes = await fetchWithTimeout(quoteUrl, 6000);
+          if (quoteRes.ok) {
+            const qData = await quoteRes.json();
+            const p = typeof qData.c === 'number' && qData.c > 0
+              ? qData.c
+              : (typeof qData.pc === 'number' && qData.pc > 0 ? qData.pc : undefined);
+            if (typeof p === 'number' && p > 0) {
+              livePrice = p;
+              break;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      return {
+        symbol: resolvedSymbol || query,
+        name: resolvedName,
+        wkn: derivedWkn || undefined,
+        price: livePrice,
+        assetType,
+      };
+    } else if (config.provider === 'twelvedata') {
+      const searchResults = await twelveDataSearch(query, apiKey);
+      if (searchResults.length > 0) {
+        const best = searchResults[0];
+        resolvedSymbol = best.symbol;
+        resolvedName = best.name;
+        assetType = best.type;
+        const quote = await fetchSingleQuote(resolvedSymbol);
+        return {
+          symbol: resolvedSymbol,
+          name: resolvedName,
+          wkn: derivedWkn || undefined,
+          price: quote?.price,
+          assetType,
+        };
+      }
+    }
+  } catch (err) {
+    console.error('[lookupSecurityByIsin] Error querying security:', err);
+  }
+
+  return derivedWkn ? { symbol: query, name: '', wkn: derivedWkn } : null;
+}

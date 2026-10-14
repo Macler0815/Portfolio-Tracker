@@ -113,9 +113,9 @@ function App() {
       const data: PortfolioExport = await portfolio.exportPortfolio();
       const jsonString = JSON.stringify(data, null, 2);
 
-      if ('showSaveFilePicker' in window) {
+      if (window.showSaveFilePicker) {
         try {
-          const handle = await (window as any).showSaveFilePicker({
+          const handle = await window.showSaveFilePicker({
             suggestedName: 'portfolio.json',
             types: [{
               description: 'JSON File',
@@ -128,24 +128,14 @@ function App() {
           setSyncStep('done');
           setTimeout(() => setSyncStep('idle'), 2500);
           return;
-        } catch (err: any) {
-          if (err.name === 'AbortError') {
+        } catch (err: unknown) {
+          if ((err as Error)?.name === 'AbortError') {
             setSyncStep('idle');
             return;
           }
         }
       }
 
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      setIosBlobUrl(url);
-      setSyncStep('modal');
-    } catch {
-      setSyncStep('idle');
-    }
-  }
-
-      // iOS / Safari fallback: show modal with download link
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       setIosBlobUrl(url);

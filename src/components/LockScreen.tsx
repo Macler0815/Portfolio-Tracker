@@ -1,4 +1,4 @@
-import { Lock, Fingerprint, ShieldCheck, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { Lock, Fingerprint, ShieldCheck, Loader2, AlertTriangle, EyeOff } from 'lucide-react';
 import type { BiometricState } from '@/hooks/useBiometric';
 
 interface LockScreenProps {
