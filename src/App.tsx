@@ -71,7 +71,7 @@ function App() {
     setTxModalOpen(true);
   }
 
-  // INTELLIGENTE AUTOMATISCHE TICKER-SUCHE PER ISIN/WKN
+  // INTELLIGENTE AUTOMATISCHE TICKER-SUCHE PER ISIN
   async function handleSaveTransaction(t: Omit<Transaction, 'id'> | Transaction) {
     let finalSymbol = t.symbol.trim().toUpperCase();
     const isIsinOrWkn = finalSymbol.length === 12 || finalSymbol.length === 6;
@@ -81,10 +81,10 @@ function App() {
         const config = await getApiKeyConfig();
         const apiKey = config?.apiKey || '';
         if (apiKey) {
-          const response = await fetch(`https://finnhub.io{finalSymbol}&token=${apiKey}`);
+          const response = await fetch(`https://finnhub.io/api/v1/search?q=${finalSymbol}&token=${apiKey}`);
           const searchData = await response.json();
+          // Korrektur: Greife auf das erste Element im result-Array zu
           if (searchData.result && searchData.result.length > 0) {
-            // Nimm das Symbol des ersten Suchtreffers
             finalSymbol = searchData.result[0].symbol;
           }
         }
@@ -100,6 +100,7 @@ function App() {
       portfolio.addTransaction(updatedTransaction);
     }
   }
+
 
   function handleEditPrice(h: Holding) {
     setPriceHolding(h);
