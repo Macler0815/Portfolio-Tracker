@@ -467,7 +467,7 @@ export async function fetchSecurityDetails(symbolOrIsin: string): Promise<Securi
     const quotePromise = fetchSingleQuote(clean).catch(() => null);
 
     // 2. If provider is finnhub, fetch profile2
-    let profilePromise: Promise<any> = Promise.resolve(null);
+    let profilePromise: Promise<Record<string, unknown> | null> = Promise.resolve(null);
     if (config.provider === 'finnhub') {
       const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(clean)}&token=${config.apiKey}`;
       profilePromise = fetchWithTimeout(profileUrl, 8000)
