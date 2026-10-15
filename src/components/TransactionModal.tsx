@@ -499,7 +499,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
         className="mt-auto rounded-t-3xl bg-white dark:bg-gray-900 max-h-[90vh] overflow-y-auto safe-bottom"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header - Simple and direct, no old search button */}
+        {/* Header - Simple and direct */}
         <div className="sticky top-0 bg-white dark:bg-gray-900 pt-3 pb-2 z-20 border-b border-gray-100 dark:border-gray-800">
           <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-700 mx-auto mb-2" />
           <div className="flex items-center justify-between px-5">
@@ -606,9 +606,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder="Ticker oder Name tippen (z.B. AAPL, MSFT, EUNL.DE)"
-                autoComplete="one-time-code"
+                autoComplete="off"
                 autoCorrect="off"
                 spellCheck="false"
+                autoCapitalize="off"
                 className={`w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono ${
                   searching || isinLookingUp ? 'pr-9' : ''
                 }`}
@@ -719,9 +720,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="z.B. Apple Inc. oder iShares Core MSCI World"
-              autoComplete="one-time-code"
+              autoComplete="off"
               autoCorrect="off"
               spellCheck="false"
+              autoCapitalize="off"
               className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
             />
           </div>
@@ -760,9 +762,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                   onChange={(e) => handleIsinChange(e.target.value)}
                   placeholder="ISIN (z.B. US0378331005)"
                   maxLength={12}
-                  autoComplete="one-time-code"
+                  autoComplete="off"
                   autoCorrect="off"
                   spellCheck="false"
+                  autoCapitalize="off"
                   className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono tracking-wider"
                 />
                 {isinLookingUp && (
@@ -776,9 +779,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 onChange={(e) => handleWknChange(e.target.value)}
                 placeholder="WKN (z.B. 865985)"
                 maxLength={6}
-                autoComplete="one-time-code"
+                autoComplete="off"
                 autoCorrect="off"
                 spellCheck="false"
+                autoCapitalize="off"
                 className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono tracking-wider"
               />
             </div>
@@ -798,9 +802,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder="10"
-                autoComplete="one-time-code"
+                autoComplete="off"
                 autoCorrect="off"
                 spellCheck="false"
+                autoCapitalize="off"
                 className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none font-mono"
               />
             </div>
@@ -827,9 +832,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                   setPriceFetched(true);
                 }}
                 placeholder={priceFetching ? 'Lade Kurs…' : '150.00'}
-                autoComplete="one-time-code"
+                autoComplete="off"
                 autoCorrect="off"
                 spellCheck="false"
+                autoCapitalize="off"
                 className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none font-mono"
               />
             </div>
@@ -848,9 +854,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 onChange={(e) => setBank(e.target.value)}
                 list="bank-list"
                 placeholder="z.B. Trade Republic, Scalable, ING"
-                autoComplete="one-time-code"
+                autoComplete="off"
                 autoCorrect="off"
                 spellCheck="false"
+                autoCapitalize="off"
                 className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 pl-10 pr-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
               />
               <datalist id="bank-list">
@@ -884,9 +891,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
               onChange={(e) => setNote(e.target.value)}
               placeholder="Optionale Notizen zu dieser Transaktion"
               rows={2}
-              autoComplete="one-time-code"
+              autoComplete="off"
               autoCorrect="off"
               spellCheck="false"
+              autoCapitalize="off"
               className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none resize-none"
             />
           </div>
