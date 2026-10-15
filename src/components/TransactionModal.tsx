@@ -93,12 +93,14 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setLookupFeedback(null);
     }
 
-    // Auto-focus inside "Symbol / Ticker" field when modal opens
-    const timer = setTimeout(() => {
-      symbolInputRef.current?.focus();
-    }, 80);
+    // Auto-focus inside "Symbol / Ticker" field when modal opens (and not editing)
+    if (!editing) {
+      const timer = setTimeout(() => {
+        symbolInputRef.current?.focus();
+      }, 150);
 
-    return () => clearTimeout(timer);
+      return () => clearTimeout(timer);
+    }
   }, [open, editing]);
 
   // Clean up search timer
