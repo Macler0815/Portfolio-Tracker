@@ -124,7 +124,18 @@ function App() {
     // 1. Sichere Prüfung: Nur Chrome/Edge/Desktop-Browser nutzen showSaveFilePicker
     if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
       try {
-        const handle = await (window as any).showSaveFilePicker({
+        const pickerWindow = window as unknown as {
+          showSaveFilePicker: (options?: {
+            suggestedName?: string;
+            types?: Array<{ description: string; accept: Record<string, string[]> }>;
+          }) => Promise<{
+            createWritable: () => Promise<{
+              write: (content: string) => Promise<void>;
+              close: () => Promise<void>;
+            }>;
+          }>;
+        };
+        const handle = await pickerWindow.showSaveFilePicker({
           suggestedName: 'portfolio.json',
           types: [{
             description: 'JSON File',

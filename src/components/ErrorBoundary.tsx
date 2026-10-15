@@ -47,9 +47,17 @@ export class ErrorBoundary extends Component<Props, State> {
             <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
               Ein Fehler ist aufgetreten
             </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
-              Die App konnte nicht korrekt geladen werden. Du kannst versuchen, die Seite neu zu laden oder den lokalen Speicher zurückzusetzen.
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
+              Die App konnte nicht korrekt geladen werden.
             </p>
+            {this.state.error && (
+              <div className="mb-5 text-left p-3 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300 overflow-x-auto max-h-48 font-mono break-all select-all">
+                <p className="font-semibold mb-1">{this.state.error.name}: {this.state.error.message}</p>
+                {this.state.error.stack && (
+                  <pre className="text-[10px] leading-tight opacity-80 whitespace-pre-wrap">{this.state.error.stack.slice(0, 500)}</pre>
+                )}
+              </div>
+            )}
             <div className="space-y-2.5">
               <button
                 onClick={this.handleReload}
