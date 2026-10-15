@@ -422,3 +422,82 @@ export async function lookupSecurityByIsin(rawQuery?: string | null): Promise<Is
 
   return derivedWkn ? { symbol: query, name: '', wkn: derivedWkn } : null;
 }
+
+export interface SecurityDetails {
+  symbol: string;
+  name?: string;
+  isin?: string;
+  wkn?: string;
+  price?: number;
+  assetType?: 'stock' | 'etf';
+}
+
+export async function fetchSecurityDetails(symbolOrIsin: string): Promise<SecurityDetails | null> {
+  if (!symbolOrIsin || typeof symbolOrIsin !== 'string') return null;
+  const clean = symbolOrIsin.trim().toUpperCase();
+  if (!clean) return null;
+
+  // If 12-char ISIN, use existing lookupSecurityByIsin
+  if (clean.length === 12 && /^[A-Z]{2}[A-Z0-9]{10}$/.test(clean)) {
+    const isinResult = await lookupSecurityByIsin(clean);
+    if (isinResult) {
+      return {
+        symbol: isinResult.symbol || clean,
+        name: isinResult.name || '',
+        isin: clean,
+        wkn: isinResult.wkn || extractWknFromIsin(clean) || undefined,
+        price: isinResult.price,
+        assetType: isinResult.assetType,
+      };
+    }
+  }
+
+  let config: ApiKeyConfig | null = null;
+  try {
+    config = await getApiKeyConfig();
+  } catch {
+    return null;
+  }
+  if (!config?.apiKey) return null;
+
+  const result: SecurityDetails = { symbol: clean };
+
+  try {
+    // 1. Fetch live quote
+    const quotePromise = fetchSingleQuote(clean).catch(() => null);
+
+    // 2. If provider is finnhub, fetch profile2
+    let profilePromise: Promise<any> = Promise.resolve(null);
+    if (config.provider === 'finnhub') {
+      const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(clean)}&token=${config.apiKey}`;
+      profilePromise = fetchWithTimeout(profileUrl, 8000)
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null);
+    }
+
+    const [quote, profile] = await Promise.all([quotePromise, profilePromise]);
+
+    if (quote?.price && quote.price > 0) {
+      result.price = quote.price;
+    }
+
+    if (profile && typeof profile === 'object') {
+      if (typeof profile.name === 'string' && profile.name) {
+        result.name = profile.name;
+      }
+      if (typeof profile.isin === 'string' && profile.isin) {
+        result.isin = profile.isin.trim().toUpperCase();
+        const derived = extractWknFromIsin(result.isin);
+        if (derived) result.wkn = derived;
+      }
+      if (typeof profile.ticker === 'string' && profile.ticker) {
+        result.symbol = profile.ticker.toUpperCase();
+      }
+    }
+  } catch (err) {
+    console.warn('[fetchSecurityDetails] error:', err);
+  }
+
+  return result;
+}
+
