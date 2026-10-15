@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Loader2, Building2, TrendingUp, Sparkles, CheckCircle2, AlertCircle, Search } from 'lucide-react';
+import { X, Loader2, Building2, TrendingUp, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { Transaction, TransactionType, AssetType } from '@/lib/types';
 import {
   searchSymbol,
   lookupSecurityByIsin,
   extractWknFromIsin,
   fetchSecurityDetails,
+  fetchSingleQuote,
   getApiKeyConfig,
   type SearchResult,
 } from '@/lib/api';
@@ -48,19 +49,22 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   } | null>(null);
 
   // Refs
+  const firstInputRef = useRef<HTMLInputElement>(null);
   const quantityInputRef = useRef<HTMLInputElement>(null);
-  const symbolInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchQueryRef = useRef<string>('');
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isinTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset or load editing transaction
+  // Reset or load editing transaction & handle INITIAL FOCUS (Symbol/Ticker)
   useEffect(() => {
     if (!open) return;
+
     if (editing) {
       setTxType(editing.type);
       setAssetType(editing.assetType);
       setSymbol(editing.symbol);
+      searchQueryRef.current = editing.symbol;
       setName(editing.name);
       const rawIsin = editing.isin || '';
       const parts = rawIsin.split(' - ');
@@ -81,6 +85,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setTxType('buy');
       setAssetType('stock');
       setSymbol('');
+      searchQueryRef.current = '';
       setName('');
       setIsin('');
       setWkn('');
@@ -95,6 +100,14 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setLookupFeedback(null);
       setIsinLookingUp(false);
       setPriceFetching(false);
+
+      // FIX INITIAL FOCUS (Symbol/Ticker):
+      // As soon as the modal opens in 'new transaction' mode, automatically focus the cursor
+      // inside the "Symbol / Ticker" input field using firstInputRef.
+      const timer = setTimeout(() => {
+        firstInputRef.current?.focus();
+      }, 70);
+      return () => clearTimeout(timer);
     }
   }, [open, editing]);
 
@@ -112,8 +125,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node) &&
-        symbolInputRef.current &&
-        !symbolInputRef.current.contains(event.target as Node)
+        firstInputRef.current &&
+        !firstInputRef.current.contains(event.target as Node)
       ) {
         setShowDropdown(false);
       }
@@ -124,14 +137,94 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     };
   }, []);
 
+  // Perform ISIN / WKN lookup
+  const performIsinLookup = useCallback(async (query: string, explicit = false) => {
+    if (!query || typeof query !== 'string') return;
+    const clean = query.trim().toUpperCase();
+    if (!clean || clean.length < 5) return;
+
+    const immediateWkn = extractWknFromIsin(clean);
+    if (immediateWkn) {
+      setWkn((prev) => prev || immediateWkn);
+    }
+
+    setIsinLookingUp(true);
+    setLookupFeedback(null);
+
+    let config = null;
+    try {
+      config = await getApiKeyConfig();
+    } catch (err) {
+      console.warn('Failed to get API config:', err);
+    }
+
+    if (!config?.apiKey) {
+      if (explicit || clean.length === 12) {
+        setLookupFeedback({
+          type: 'info',
+          text: 'Kein API-Key hinterlegt. Bitte erstelle unter Einstellungen einen Finnhub-Key für automatische Live-Kurse.',
+        });
+      }
+      setIsinLookingUp(false);
+      return;
+    }
+
+    setPriceFetching(true);
+    try {
+      const result = await lookupSecurityByIsin(clean);
+      if (result && (result.symbol || result.name || (typeof result.price === 'number' && result.price > 0))) {
+        if (result.symbol) setSymbol(result.symbol);
+        if (clean.length === 12) setIsin(clean);
+        if (result.name) setName(result.name);
+        if (result.wkn) setWkn(result.wkn);
+        if (result.assetType) setAssetType(result.assetType);
+        if (typeof result.price === 'number' && result.price > 0) {
+          setPrice(result.price.toString());
+          setPriceFetched(true);
+          const formatted = result.price.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          setLookupFeedback({
+            type: 'success',
+            text: `Finnhub: ${result.name || result.symbol || clean} (${result.symbol || clean}) · Live-Kurs: ${formatted} €`,
+          });
+        } else {
+          setLookupFeedback({
+            type: 'success',
+            text: `Finnhub: ${result.name || result.symbol || clean} gefunden · Bitte Kurs manuell eingeben.`,
+          });
+        }
+      } else {
+        if (clean.length === 12) setIsin(clean);
+        if (explicit || clean.length === 12) {
+          setLookupFeedback({
+            type: 'info',
+            text: `Keine Daten für "${clean}" bei Finnhub gefunden. Du kannst Name und Kurs manuell eintragen.`,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('ISIN Lookup failed in modal:', err);
+      if (clean.length === 12) setIsin(clean);
+      if (explicit || clean.length === 12) {
+        setLookupFeedback({
+          type: 'error',
+          text: 'Finnhub-Abfrage fehlgeschlagen. Du kannst Name und Kurs manuell eintragen.',
+        });
+      }
+    } finally {
+      setIsinLookingUp(false);
+      setPriceFetching(false);
+    }
+  }, []);
+
   // Live Finnhub search when typing in "Symbol / Ticker"
   const handleSymbolChange = (val: string) => {
     const clean = val.toUpperCase();
     setSymbol(clean);
+    searchQueryRef.current = val;
 
     if (searchTimer.current) clearTimeout(searchTimer.current);
 
-    // If empty or editing existing, close dropdown
+    // If empty, close dropdown
     if (!val.trim()) {
       setSearchResults([]);
       setShowDropdown(false);
@@ -168,161 +261,151 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     }, 280);
   };
 
-  // Perform ISIN / WKN lookup
-  const performIsinLookup = useCallback(async (query: string, explicit = false) => {
-    if (!query || typeof query !== 'string') return;
-    const clean = query.trim().toUpperCase();
-    if (!clean || clean.length < 5) return;
-
-    const immediateWkn = extractWknFromIsin(clean);
-    if (immediateWkn) {
-      setWkn((prev) => prev || immediateWkn);
-    }
-
-    setIsinLookingUp(true);
-    setLookupFeedback(null);
-
-    let config = null;
-    try {
-      config = await getApiKeyConfig();
-    } catch (err) {
-      console.warn('Failed to get API config:', err);
-    }
-
-    if (!config?.apiKey) {
-      if (explicit || clean.length === 12) {
-        setLookupFeedback({
-          type: 'info',
-          text: 'Kein API-Key hinterlegt. Bitte erstelle unter Einstellungen einen kostenlosen Finnhub-Key für automatische Live-Kurse.',
-        });
-      }
-      setIsinLookingUp(false);
-      return;
-    }
-
-    setPriceFetching(true);
-    try {
-      const result = await lookupSecurityByIsin(clean);
-      if (result && (result.symbol || result.name || (typeof result.price === 'number' && result.price > 0))) {
-        if (result.symbol) setSymbol(result.symbol);
-        if (clean.length === 12) setIsin(clean);
-        if (result.name) setName(result.name);
-        if (result.wkn) setWkn(result.wkn);
-        if (result.assetType) setAssetType(result.assetType);
-        if (typeof result.price === 'number' && result.price > 0) {
-          setPrice(result.price.toString());
-          setPriceFetched(true);
-          const formatted = result.price.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-          setLookupFeedback({
-            type: 'success',
-            text: `Finnhub: ${result.name || result.symbol || clean} (${result.symbol || clean}) · Live-Kurs: ${formatted} € eingetragen`,
-          });
-        } else {
-          setLookupFeedback({
-            type: 'success',
-            text: `Finnhub: ${result.name || result.symbol || clean} gefunden · Bitte Kurs manuell eingeben.`,
-          });
-        }
-      } else {
-        if (clean.length === 12) setIsin(clean);
-        if (explicit || clean.length === 12) {
-          setLookupFeedback({
-            type: 'info',
-            text: `Keine Daten für "${clean}" bei Finnhub gefunden. Du kannst Name und Kurs manuell eintragen.`,
-          });
-        }
-      }
-    } catch (err) {
-      console.error('ISIN Lookup failed in modal:', err);
-      if (clean.length === 12) setIsin(clean);
-      if (explicit || clean.length === 12) {
-        setLookupFeedback({
-          type: 'error',
-          text: 'Finnhub-Abfrage fehlgeschlagen. Du kannst Name und Kurs manuell eintragen.',
-        });
-      }
-    } finally {
-      setIsinLookingUp(false);
-      setPriceFetching(false);
-    }
-  }, []);
-
-  // When a search result is selected from dropdown:
-  // 1. Auto-fill 5 fields: Symbol/Ticker, ISIN, WKN, Name, Price
-  // 2. Close dropdown
-  // 3. Move focus to "Stückzahl" (quantity) input ref
-  const handleSelectResult = async (result: SearchResult) => {
-    // Immediately close dropdown and clear search
+  // selectResult function:
+  // - Populate "Symbol / Ticker" (r.symbol), "Name" (r.name), deduce "AssetType" ('etf' | 'stock')
+  // - If search query was a 12-char ISIN, preserve that ISIN in ISIN field & auto-populate WKN via extractWknFromIsin(searchQuery)
+  // - When fetching live price, if regional exchange (.DU, .HM, .SG, etc.) returns NO price (0 or undefined),
+  //   automatically try fallback fetch for main German tickers (.DE or .F) of same asset.
+  //   If all fail, leave price field blank but fully editable.
+  // - Immediately after dropdown closes & fields are filled, shift active keyboard cursor into "Stückzahl" using quantityInputRef.current?.focus()
+  const selectResult = async (r: SearchResult) => {
+    // 1. Immediately close dropdown and clear search
     setShowDropdown(false);
     setSearchResults([]);
 
-    // 1. Field: Symbol / Ticker
-    const chosenSymbol = result.symbol.toUpperCase();
+    const chosenSymbol = r.symbol.toUpperCase();
+    const query = searchQueryRef.current.trim().toUpperCase();
+    const is12CharIsinQuery = query.length === 12 && /^[A-Z]{2}[A-Z0-9]{10}$/.test(query);
+
+    // Populate Symbol / Ticker
     setSymbol(chosenSymbol);
 
-    // 2. Field: Name
-    setName(result.name || chosenSymbol);
+    // Populate Name
+    setName(r.name || chosenSymbol);
 
-    // Update asset type
-    if (result.type === 'etf') {
-      setAssetType('etf');
-    } else if (result.type === 'stock') {
-      setAssetType('stock');
+    // Deduce AssetType ('etf' or 'stock')
+    const deducedType: AssetType =
+      r.type === 'etf' || /etf|ucits|ishares|vanguard|xtrackers|amundi/i.test(r.name || '')
+        ? 'etf'
+        : 'stock';
+    setAssetType(deducedType);
+
+    // Preserve ISIN & WKN if user had entered an ISIN
+    if (is12CharIsinQuery) {
+      setIsin(query);
+      const derivedWkn = extractWknFromIsin(query);
+      if (derivedWkn) setWkn(derivedWkn);
     }
 
-    // Prepare loading state for remaining details (Price, ISIN, WKN)
+    // FIX AFTER-SELECTION FOCUS (Stückzahl):
+    // Immediately after a result is selected and dropdown closes, shift focus directly to "Stückzahl"
+    setTimeout(() => {
+      quantityInputRef.current?.focus();
+    }, 30);
+
+    // Prepare loading state
     setPriceFetching(true);
     setIsinLookingUp(true);
     setLookupFeedback(null);
 
-    // 4. Immediately after result is selected & dropdown closes, move input focus to "Stückzahl"
-    setTimeout(() => {
-      quantityInputRef.current?.focus();
-    }, 50);
-
     try {
+      // Fetch security details (profile & quote)
       const details = await fetchSecurityDetails(chosenSymbol);
-      if (details) {
-        // 3. Field: Price
-        if (typeof details.price === 'number' && details.price > 0) {
-          setPrice(details.price.toString());
-          setPriceFetched(true);
+
+      // Populate ISIN & WKN if not already set by ISIN search
+      if (!is12CharIsinQuery && details?.isin) {
+        setIsin(details.isin);
+        const wknFromIsin = details.wkn || extractWknFromIsin(details.isin);
+        if (wknFromIsin) setWkn(wknFromIsin);
+      } else if (!is12CharIsinQuery && details?.wkn) {
+        setWkn(details.wkn);
+      }
+
+      // Improve name if details has a better company name
+      if (details?.name && (!r.name || r.name === chosenSymbol)) {
+        setName(details.name);
+      }
+
+      // Check price & execute German fallback (.DE or .F) if no price returned
+      let resolvedPrice: number | undefined = undefined;
+      if (typeof details?.price === 'number' && details.price > 0) {
+        resolvedPrice = details.price;
+      }
+
+      // PRICE FALLBACK: If regional exchange (like .DU, .HM, .SG, .BE, .MU) returns NO price (0 or undefined),
+      // automatically try fallback fetch for main German tickers (.DE or .F)
+      if (!resolvedPrice) {
+        const baseSymbol = chosenSymbol.includes('.') ? chosenSymbol.split('.')[0] : chosenSymbol;
+
+        // Try .DE (XETRA)
+        if (baseSymbol) {
+          try {
+            const deQuote = await fetchSingleQuote(`${baseSymbol}.DE`);
+            if (deQuote?.price && deQuote.price > 0) {
+              resolvedPrice = deQuote.price;
+            }
+          } catch {
+            // ignore and try next fallback
+          }
         }
 
-        // 4. Field: ISIN
-        if (details.isin) {
-          setIsin(details.isin);
+        // Try .F (Frankfurt)
+        if (!resolvedPrice && baseSymbol) {
+          try {
+            const fQuote = await fetchSingleQuote(`${baseSymbol}.F`);
+            if (fQuote?.price && fQuote.price > 0) {
+              resolvedPrice = fQuote.price;
+            }
+          } catch {
+            // ignore and try next fallback
+          }
         }
 
-        // 5. Field: WKN
-        if (details.wkn) {
-          setWkn(details.wkn);
-        } else if (details.isin) {
-          const derivedWkn = extractWknFromIsin(details.isin);
-          if (derivedWkn) setWkn(derivedWkn);
+        // Try base symbol directly if it was regional (e.g. US main ticker)
+        if (!resolvedPrice && baseSymbol && baseSymbol !== chosenSymbol) {
+          try {
+            const baseQuote = await fetchSingleQuote(baseSymbol);
+            if (baseQuote?.price && baseQuote.price > 0) {
+              resolvedPrice = baseQuote.price;
+            }
+          } catch {
+            // ignore
+          }
         }
+      }
 
-        // Refine Name if better one returned from profile
-        if (details.name && (!result.name || result.name === chosenSymbol)) {
-          setName(details.name);
-        }
-
-        const priceDisplay = details.price
-          ? `${details.price.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
-          : null;
-
+      if (resolvedPrice && resolvedPrice > 0) {
+        setPrice(resolvedPrice.toString());
+        setPriceFetched(true);
+        const formatted = resolvedPrice.toLocaleString('de-DE', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
         setLookupFeedback({
           type: 'success',
-          text: `Ausgewählt: ${details.name || result.name} (${chosenSymbol})${
-            priceDisplay ? ` · Live-Kurs: ${priceDisplay}` : ''
-          }${details.isin ? ` · ISIN: ${details.isin}` : ''}`,
+          text: `Ausgewählt: ${details?.name || r.name || chosenSymbol} · Live-Kurs: ${formatted} €`,
+        });
+      } else {
+        // If all fail, leave the price field blank but fully editable
+        setPrice('');
+        setPriceFetched(false);
+        setLookupFeedback({
+          type: 'info',
+          text: `Ausgewählt: ${details?.name || r.name || chosenSymbol} · Kein Live-Kurs gefunden, bitte Kurs manuell eingeben.`,
         });
       }
     } catch (err) {
       console.error('Error fetching security details after selection:', err);
+      // Leave price blank but editable on error
+      setPrice('');
+      setPriceFetched(false);
     } finally {
       setPriceFetching(false);
       setIsinLookingUp(false);
+      // Ensure focus remains on Stückzahl
+      setTimeout(() => {
+        quantityInputRef.current?.focus();
+      }, 50);
     }
   };
 
@@ -339,7 +422,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     } else if (e.key === 'Enter') {
       if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
         e.preventDefault();
-        handleSelectResult(searchResults[highlightedIndex]);
+        selectResult(searchResults[highlightedIndex]);
       }
     } else if (e.key === 'Escape') {
       setShowDropdown(false);
@@ -487,7 +570,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
             </button>
           </div>
 
-          {/* Symbol / Ticker input with INLINE AUTOCOMPLETE DROPDOWN */}
+          {/* 1. INPUT: Symbol / Ticker with INLINE AUTOCOMPLETE DROPDOWN */}
           <div className="relative">
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
@@ -514,7 +597,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
 
             <div className="relative">
               <input
-                ref={symbolInputRef}
+                ref={firstInputRef}
                 type="text"
                 value={symbol}
                 onChange={(e) => handleSymbolChange(e.target.value)}
@@ -523,7 +606,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder="Ticker oder Name tippen (z.B. AAPL, MSFT, EUNL.DE)"
-                autoComplete="off"
+                autoComplete="one-time-code"
+                autoCorrect="off"
                 spellCheck="false"
                 className={`w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono ${
                   searching || isinLookingUp ? 'pr-9' : ''
@@ -544,7 +628,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
               >
                 <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/80 text-[11px] font-medium text-gray-500 dark:text-gray-400 flex items-center justify-between">
                   <span>Finnhub Suchergebnisse ({searchResults.length})</span>
-                  <span className="text-[10px]">Klick wählt &amp; füllt alle 5 Felder</span>
+                  <span className="text-[10px]">Klick wählt &amp; füllt Felder</span>
                 </div>
                 {searchResults.map((r, index) => {
                   const isHighlighted = index === highlightedIndex;
@@ -553,9 +637,8 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                       key={`${r.symbol}-${r.exchange}-${index}`}
                       type="button"
                       onMouseDown={(e) => {
-                        // Prevent blur before click
                         e.preventDefault();
-                        handleSelectResult(r);
+                        selectResult(r);
                       }}
                       className={`w-full px-3.5 py-2.5 text-left flex items-center justify-between transition-colors ${
                         isHighlighted
@@ -626,7 +709,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
             </div>
           )}
 
-          {/* Name (Wertpapiername) */}
+          {/* 2. INPUT: Name (Wertpapiername) */}
           <div>
             <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
               Name (Wertpapiername)
@@ -636,11 +719,14 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="z.B. Apple Inc. oder iShares Core MSCI World"
+              autoComplete="one-time-code"
+              autoCorrect="off"
+              spellCheck="false"
               className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
             />
           </div>
 
-          {/* ISIN & WKN fields */}
+          {/* 3. INPUT & 4. INPUT: ISIN & WKN fields */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block">
@@ -674,6 +760,9 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                   onChange={(e) => handleIsinChange(e.target.value)}
                   placeholder="ISIN (z.B. US0378331005)"
                   maxLength={12}
+                  autoComplete="one-time-code"
+                  autoCorrect="off"
+                  spellCheck="false"
                   className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono tracking-wider"
                 />
                 {isinLookingUp && (
@@ -687,12 +776,15 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 onChange={(e) => handleWknChange(e.target.value)}
                 placeholder="WKN (z.B. 865985)"
                 maxLength={6}
+                autoComplete="one-time-code"
+                autoCorrect="off"
+                spellCheck="false"
                 className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono tracking-wider"
               />
             </div>
           </div>
 
-          {/* Quantity & Price (Stückzahl input gets auto-focused via quantityInputRef) */}
+          {/* 5. INPUT: Stückzahl & 6. INPUT: Kurs */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
@@ -706,6 +798,9 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder="10"
+                autoComplete="one-time-code"
+                autoCorrect="off"
+                spellCheck="false"
                 className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none font-mono"
               />
             </div>
@@ -732,12 +827,15 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                   setPriceFetched(true);
                 }}
                 placeholder={priceFetching ? 'Lade Kurs…' : '150.00'}
+                autoComplete="one-time-code"
+                autoCorrect="off"
+                spellCheck="false"
                 className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none font-mono"
               />
             </div>
           </div>
 
-          {/* Bank */}
+          {/* 7. INPUT: Bank / Broker */}
           <div>
             <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
               Bank / Broker
@@ -750,6 +848,9 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 onChange={(e) => setBank(e.target.value)}
                 list="bank-list"
                 placeholder="z.B. Trade Republic, Scalable, ING"
+                autoComplete="one-time-code"
+                autoCorrect="off"
+                spellCheck="false"
                 className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 pl-10 pr-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
               />
               <datalist id="bank-list">
@@ -783,6 +884,9 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
               onChange={(e) => setNote(e.target.value)}
               placeholder="Optionale Notizen zu dieser Transaktion"
               rows={2}
+              autoComplete="one-time-code"
+              autoCorrect="off"
+              spellCheck="false"
               className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none resize-none"
             />
           </div>
