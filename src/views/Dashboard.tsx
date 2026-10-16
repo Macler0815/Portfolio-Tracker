@@ -1,6 +1,6 @@
 import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudUpload, CheckCircle2, Loader2, Info } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
-import { formatCurrency, formatPercent, timeAgo } from '@/lib/format';
+import { formatCurrency, formatPercent, formatNumber, timeAgo } from '@/lib/format';
 
 interface DashboardProps {
   summary: PortfolioSummary;
@@ -124,47 +124,26 @@ export function Dashboard({ summary, holdings, refreshing, lastRefresh, error, o
         <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
           <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Alle Positionen</h2>
           <div className="space-y-3">
-            {holdings.map((h, idx) => {
-              const quantity = Math.round(h?.quantity || 0);
-              const price = typeof h?.currentPrice === 'number' && !isNaN(h.currentPrice) ? h.currentPrice : 0;
-              const totalValue = (quantity && price && price > 0)
-                ? (quantity * price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
-                : '—';
-              const rowKey = h?.symbol ? `${h.symbol}-${idx}` : `pos-${idx}`;
-
-              return (
-                <div key={rowKey} className="flex items-center justify-between gap-2 sm:gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                      {h?.name || h?.symbol || 'Position'}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      {h?.symbol || '—'} · {quantity.toLocaleString('de-DE', { maximumFractionDigits: 0 })} Stück
-                    </p>
+            {holdings.map((h) => (
+              <div key={h.symbol} className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{h.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {h.symbol} · {formatNumber(h.quantity, 4)} Stück
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-right shrink-0">
+                  <div>
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500 block">Kaufkurs</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{formatCurrency(h.avgBuyPrice)}</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 sm:gap-3 text-right shrink-0">
-                    <div>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 block">Kaufkurs</span>
-                      <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {formatCurrency(h?.avgBuyPrice || 0)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 block">Aktuell</span>
-                      <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
-                        {price > 0 ? formatCurrency(price) : '—'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 block">Gesamtwert</span>
-                      <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">
-                        {totalValue}
-                      </span>
-                    </div>
+                  <div>
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500 block">Aktuell</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(h.currentPrice)}</span>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       )}
