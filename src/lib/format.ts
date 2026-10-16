@@ -1,17 +1,19 @@
 export function formatCurrency(value: number, currency = 'EUR', compact = false): string {
+  const safeVal = typeof value === 'number' && !isNaN(value) ? value : 0;
   const opts: Intl.NumberFormatOptions = compact
     ? { notation: 'compact', maximumFractionDigits: 1 }
     : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
   try {
-    return new Intl.NumberFormat('de-DE', { ...opts, style: 'currency', currency }).format(value);
+    return new Intl.NumberFormat('de-DE', { ...opts, style: 'currency', currency }).format(safeVal);
   } catch {
-    return `${value.toFixed(2)} ${currency}`;
+    return `${safeVal.toFixed(2)} ${currency}`;
   }
 }
 
 export function formatPercent(value: number, withSign = true): string {
-  const sign = withSign && value > 0 ? '+' : '';
-  return `${sign}${value.toFixed(2)}%`;
+  const safeVal = typeof value === 'number' && !isNaN(value) ? value : 0;
+  const sign = withSign && safeVal > 0 ? '+' : '';
+  return `${sign}${safeVal.toFixed(2)}%`;
 }
 
 export function formatDate(iso: string): string {

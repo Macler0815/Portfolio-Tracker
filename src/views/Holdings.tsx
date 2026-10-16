@@ -27,29 +27,31 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
       <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white mb-4">Positionen</h1>
 
       <div className="space-y-3">
-        {holdings.map((h) => {
-          const plPositive = h.pl >= 0;
+        {holdings.map((h, idx) => {
+          const plPositive = (h?.pl || 0) >= 0;
+          const quantity = Math.round(h?.quantity || 0);
+          const rowKey = h?.symbol ? `${h.symbol}-${idx}` : `holding-${idx}`;
           return (
-            <div key={h.symbol} className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4">
+            <div key={rowKey} className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-gray-900 dark:text-white truncate">{h.name}</h3>
-                    {h.priceSource === 'missing' && (
+                    <h3 className="font-semibold text-gray-900 dark:text-white truncate">{h?.name || h?.symbol || 'Position'}</h3>
+                    {h?.priceSource === 'missing' && (
                       <AlertTriangle size={15} className="text-amber-500 shrink-0" />
                     )}
-                    {h.priceSource === 'manual' && (
+                    {h?.priceSource === 'manual' && (
                       <span className="text-xs text-blue-600 dark:text-blue-400 font-medium shrink-0">manuell</span>
                     )}
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    {h.symbol} · {Math.round(h.quantity).toLocaleString('de-DE')} Stück
+                    {h?.symbol || '—'} · {quantity.toLocaleString('de-DE', { maximumFractionDigits: 0 })} Stück
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="font-semibold text-gray-900 dark:text-white">{formatCurrency(h.marketValue)}</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">{formatCurrency(h?.marketValue || 0)}</p>
                   <p className={`text-sm font-medium ${plPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                    {formatCurrency(Math.abs(h.pl))} ({formatPercent(h.plPercent)})
+                    {formatCurrency(Math.abs(h?.pl || 0))} ({formatPercent(h?.plPercent || 0)})
                   </p>
                 </div>
               </div>
