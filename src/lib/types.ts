@@ -52,6 +52,7 @@ export interface Holding {
   invested: number;
   fees: number;
   currentPrice: number;
+  price?: number;
   marketValue: number;
   pl: number;
   plPercent: number;

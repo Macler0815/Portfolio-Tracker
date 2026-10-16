@@ -60,6 +60,7 @@ export function computeHoldings(transactions: Transaction[], prices: Map<string,
       h.currentPrice = h.avgBuyPrice;
       h.priceSource = 'missing';
     }
+    h.price = h.currentPrice;
     h.marketValue = h.quantity * h.currentPrice;
     h.pl = h.marketValue - h.invested;
     h.plPercent = h.invested > 0 ? (h.pl / h.invested) * 100 : 0;
