@@ -129,7 +129,7 @@ export function Dashboard({ summary, holdings, refreshing, lastRefresh, error, o
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{h.name}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    {h.symbol} · {formatNumber(h.quantity)} Stück
+                    {h.symbol} · {formatNumber(h.quantity,0)} Stück
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-right shrink-0">
