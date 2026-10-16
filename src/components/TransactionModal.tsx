@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { X, Loader2, Building2, TrendingUp, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Search, X, Check, Loader2, Building2, TrendingUp, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { Transaction, TransactionType, AssetType } from '@/lib/types';
 import {
   searchSymbol,
   fetchSingleQuote,
   lookupSecurityByIsin,
   extractWknFromIsin,
+  getApiKeyConfig,
   type SearchResult,
 } from '@/lib/api';
 import { todayISO } from '@/lib/format';
@@ -19,39 +20,34 @@ interface TransactionModalProps {
 }
 
 export function TransactionModal({ open, editing, onClose, onSave, knownBanks }: TransactionModalProps) {
-  // Autocomplete / Search state
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Form state
   const [txType, setTxType] = useState<TransactionType>('buy');
   const [assetType, setAssetType] = useState<AssetType>('stock');
-  const [symbol, setSymbol] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [price, setPrice] = useState('');
+  const [priceFetching, setPriceFetching] = useState(false);
+  const [priceFetched, setPriceFetched] = useState(false);
+  const [date, setDate] = useState(todayISO());
+  const [note, setNote] = useState('');
   const [name, setName] = useState('');
   const [isin, setIsin] = useState('');
   const [wkn, setWkn] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [price, setPrice] = useState('');
-  const [date, setDate] = useState(todayISO());
   const [bank, setBank] = useState('');
-  const [note, setNote] = useState('');
-
-  // Status & Feedback
-  const [priceFetching, setPriceFetching] = useState(false);
-  const [priceFetched, setPriceFetched] = useState(false);
+  const [symbol, setSymbol] = useState('');
   const [isinLookingUp, setIsinLookingUp] = useState(false);
   const [lookupFeedback, setLookupFeedback] = useState<{
     type: 'success' | 'error' | 'info';
     text: string;
   } | null>(null);
 
-  // Refs
   const symbolInputRef = useRef<HTMLInputElement>(null);
+  const quantityInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset or load editing transaction & handle initial focus
   useEffect(() => {
     if (!open) return;
 
@@ -93,7 +89,6 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setLookupFeedback(null);
     }
 
-    // Auto-focus inside "Symbol / Ticker" field when modal opens (and not editing)
     if (!editing) {
       const timer = setTimeout(() => {
         symbolInputRef.current?.focus();
@@ -103,7 +98,6 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     }
   }, [open, editing]);
 
-  // Click outside to dismiss dropdown
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -116,20 +110,21 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Clean up search timer on unmount
+  // Clean up search timer on unmount and check API config
   useEffect(() => {
+    if (open) {
+      getApiKeyConfig().catch(() => null);
+    }
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
-  }, []);
+  }, [open]);
 
   // Live search handler for Symbol / Ticker input
-  const handleSymbolChange = (val: string) => {
+  const handleSymbolChange = useCallback((val: string) => {
     const upper = val.toUpperCase();
     setSymbol(upper);
 
@@ -157,7 +152,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
         setSearching(false);
       }
     }, 300);
-  };
+  }, []);
 
   // Selecting a result from autocomplete dropdown
   const selectResult = async (r: SearchResult) => {
@@ -181,9 +176,12 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       if (derivedWkn) setWkn(derivedWkn);
     }
 
-    // Close autocomplete dropdown
+    // Close autocomplete dropdown and focus quantity
     setShowDropdown(false);
     setSearchResults([]);
+    setTimeout(() => {
+      quantityInputRef.current?.focus();
+    }, 50);
 
     // 2. Smart Price Fallback in background
     setPriceFetching(true);
@@ -430,6 +428,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
               Symbol / Ticker <span className="text-red-500">*</span>
             </label>
             <div className="relative">
+              <Search
+                size={16}
+                className="text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              />
               <input
                 ref={symbolInputRef}
                 type="text"
@@ -439,7 +441,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                   if (searchResults.length > 0) setShowDropdown(true);
                 }}
                 placeholder="z.B. AAPL oder EUNL.DE"
-                className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono pr-9"
+                className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 pl-9 pr-9 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono"
               />
               {searching && (
                 <Loader2
@@ -599,6 +601,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
                 Stückzahl <span className="text-red-500">*</span>
               </label>
               <input
+                ref={quantityInputRef}
                 type="number"
                 step="any"
                 inputMode="decimal"
@@ -706,9 +709,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
             type="button"
             onClick={handleSave}
             disabled={!canSave}
-            className="w-full rounded-xl bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white py-3.5 text-sm font-semibold transition-all disabled:opacity-40 disabled:active:scale-100 shadow-sm"
+            className="w-full rounded-xl bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white py-3.5 text-sm font-semibold transition-all disabled:opacity-40 disabled:active:scale-100 shadow-sm flex items-center justify-center gap-2"
           >
-            {editing ? 'Änderungen speichern' : 'Transaktion hinzufügen'}
+            <Check size={18} />
+            <span>{editing ? 'Änderungen speichern' : 'Transaktion hinzufügen'}</span>
           </button>
         </div>
       </div>
