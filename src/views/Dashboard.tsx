@@ -123,29 +123,45 @@ export function Dashboard({ summary, holdings, refreshing, lastRefresh, error, o
       {holdings.length > 0 && (
         <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
           <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Alle Positionen</h2>
-          <div className="space-y-3">
-            {holdings.map((h) => {
-              const totalValue = (h.quantity && h.price && h.price > 0) ? (h.quantity * h.price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '—';
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {holdings.map((h, idx) => {
+              const price = h.price ?? h.currentPrice;
+              const totalValue = (h.quantity && price && price > 0)
+                ? (h.quantity * price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
+                : '—';
+
               return (
-                <div key={h.symbol} className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{h.name}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      {h.symbol} · {formatNumber(h.quantity, 0)} Stück
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 text-right shrink-0">
+                <div key={h.symbol || idx} className={`space-y-2 ${idx > 0 ? 'pt-3.5 mt-3.5' : ''}`}>
+                  {/* 1. THE ASSET BLOCK (Top Line) */}
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                    {h.symbol} · {h.name}
+                  </p>
+
+                  {/* 2. THE NUMERIC FINANCIAL GRID (Bottom Line) */}
+                  <div className="grid grid-cols-4 gap-2 text-left">
                     <div>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 block">Kaufkurs</span>
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{formatCurrency(h.avgBuyPrice)}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Menge</span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-white block mt-0.5">
+                        {formatNumber(h.quantity, 0)} Stk.
+                      </span>
                     </div>
                     <div>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 block">Aktuell</span>
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(h.currentPrice)}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Kaufkurs</span>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block mt-0.5">
+                        {formatCurrency(h.avgBuyPrice)}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 block">Gesamtwert</span>
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white">{totalValue}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Aktuell</span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-white block mt-0.5">
+                        {formatCurrency(h.currentPrice)}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Gesamtwert</span>
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white block mt-0.5">
+                        {totalValue}
+                      </span>
                     </div>
                   </div>
                 </div>
