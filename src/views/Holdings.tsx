@@ -1,6 +1,6 @@
 import { AlertTriangle, Edit3 } from 'lucide-react';
 import type { Holding, Transaction } from '@/lib/types';
-import { formatCurrency, formatPercent, formatNumber } from '@/lib/format';
+import { formatCurrency, formatPercent } from '@/lib/format';
 import { PerformanceChart } from '@/components/PerformanceChart';
 
 interface HoldingsViewProps {
@@ -43,7 +43,7 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
                     )}
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    {h.symbol} · {formatNumber(h.quantity, 4)} Stück
+                    {h.symbol} · {Math.round(h.quantity).toLocaleString('de-DE')} Stück
                   </p>
                 </div>
                 <div className="text-right shrink-0">
