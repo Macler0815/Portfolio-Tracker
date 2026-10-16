@@ -123,7 +123,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     };
   }, [open]);
 
-  // Live search handler for Symbol / Ticker input
+  // Live search handler for Symbol / Ticker input + background price fetcher on ticker edit
   const handleSymbolChange = useCallback((val: string) => {
     const upper = val.toUpperCase();
     setSymbol(upper);
@@ -151,10 +151,36 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       } finally {
         setSearching(false);
       }
+
+      // If user typed/toggled a specific ticker ending with exchange suffix (e.g. .DE, .F, .DU, etc.)
+      // trigger background quote fetch
+      const trimmedUpper = upper.trim();
+      if (/\.[A-Z]{1,4}$/.test(trimmedUpper)) {
+        try {
+          setPriceFetching(true);
+          const quote = await fetchSingleQuote(trimmedUpper);
+          if (quote && quote.price && quote.price > 0) {
+            setPrice(String(quote.price));
+            setPriceFetched(true);
+            const formatted = quote.price.toLocaleString('de-DE', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            });
+            setLookupFeedback({
+              type: 'success',
+              text: `Live-Kurs für ${trimmedUpper}: ${formatted} €`,
+            });
+          }
+        } catch {
+          // If quote fetch fails, do not crash and leave price editable
+        } finally {
+          setPriceFetching(false);
+        }
+      }
     }, 300);
   }, []);
 
-  // Selecting a result from autocomplete dropdown
+  // Selecting a result from autocomplete dropdown (simplified, reliable, no fallback loops)
   const selectResult = async (r: SearchResult) => {
     const sym = r.symbol.toUpperCase();
     const queryWas = symbol.trim().toUpperCase();
@@ -164,15 +190,15 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     setName(r.name || sym);
     setAssetType(r.type === 'etf' ? 'etf' : 'stock');
 
-    // Populate ISIN & WKN if selected symbol or search query is a 12-char ISIN
+    // Populate ISIN & WKN if search query was a valid 12-char ISIN (or sym is an ISIN)
     const is12CharIsin = (val: string) => /^[A-Z]{2}[A-Z0-9]{10}$/.test(val);
-    if (is12CharIsin(sym)) {
-      setIsin(sym);
-      const derivedWkn = extractWknFromIsin(sym);
-      if (derivedWkn) setWkn(derivedWkn);
-    } else if (is12CharIsin(queryWas)) {
+    if (is12CharIsin(queryWas)) {
       setIsin(queryWas);
       const derivedWkn = extractWknFromIsin(queryWas);
+      if (derivedWkn) setWkn(derivedWkn);
+    } else if (is12CharIsin(sym)) {
+      setIsin(sym);
+      const derivedWkn = extractWknFromIsin(sym);
       if (derivedWkn) setWkn(derivedWkn);
     }
 
@@ -183,37 +209,13 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       quantityInputRef.current?.focus();
     }, 50);
 
-    // 2. Smart Price Fallback in background
+    // 2. Fetch live price for selected ticker without fallback loops
     setPriceFetching(true);
     setLookupFeedback(null);
 
     try {
-      // Primary quote lookup
       const quote = await fetchSingleQuote(r.symbol);
-      let foundPrice = quote?.price && quote.price > 0 ? quote.price : null;
-      let quoteTicker = r.symbol;
-
-      // Fallback: If regional exchange (e.g. .DU, .HM, .SG) returns NO price (0, null, or undefined),
-      // try the main German exchange tickers (.DE or .F) of that same asset
-      if (!foundPrice) {
-        const baseSymbol = r.symbol.includes('.') ? r.symbol.split('.')[0] : r.symbol;
-        const fallbackTickers = [`${baseSymbol}.DE`, `${baseSymbol}.F`].filter(
-          (t) => t.toUpperCase() !== r.symbol.toUpperCase()
-        );
-
-        for (const fbTicker of fallbackTickers) {
-          try {
-            const fbQuote = await fetchSingleQuote(fbTicker);
-            if (fbQuote?.price && fbQuote.price > 0) {
-              foundPrice = fbQuote.price;
-              quoteTicker = fbTicker;
-              break;
-            }
-          } catch {
-            // continue fallback loop
-          }
-        }
-      }
+      const foundPrice = quote?.price && quote.price > 0 ? quote.price : null;
 
       if (foundPrice && foundPrice > 0) {
         setPrice(String(foundPrice));
@@ -224,10 +226,10 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
         });
         setLookupFeedback({
           type: 'success',
-          text: `Live-Kurs für ${quoteTicker}: ${formatted} €`,
+          text: `Live-Kurs für ${r.symbol}: ${formatted} €`,
         });
       } else {
-        // If all lookups fail, leave price field blank but fully editable
+        // If it returns 0 or no price, simply leave the price input field empty and unlocked
         setPrice('');
         setPriceFetched(false);
         setLookupFeedback({
