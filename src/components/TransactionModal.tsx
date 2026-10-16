@@ -160,36 +160,92 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   };
 
   // Selecting a result from autocomplete dropdown
-  const handleSelectSearchResult = async (r: SearchResult) => {
+  const selectResult = async (r: SearchResult) => {
     const sym = r.symbol.toUpperCase();
+    const queryWas = symbol.trim().toUpperCase();
+
+    // 1. Populate Symbol, Name, AssetType
     setSymbol(sym);
     setName(r.name || sym);
     setAssetType(r.type === 'etf' ? 'etf' : 'stock');
+
+    // Populate ISIN & WKN if selected symbol or search query is a 12-char ISIN
+    const is12CharIsin = (val: string) => /^[A-Z]{2}[A-Z0-9]{10}$/.test(val);
+    if (is12CharIsin(sym)) {
+      setIsin(sym);
+      const derivedWkn = extractWknFromIsin(sym);
+      if (derivedWkn) setWkn(derivedWkn);
+    } else if (is12CharIsin(queryWas)) {
+      setIsin(queryWas);
+      const derivedWkn = extractWknFromIsin(queryWas);
+      if (derivedWkn) setWkn(derivedWkn);
+    }
+
+    // Close autocomplete dropdown
     setShowDropdown(false);
     setSearchResults([]);
 
-    // Fetch live quote for selected symbol
+    // 2. Smart Price Fallback in background
     setPriceFetching(true);
+    setLookupFeedback(null);
+
     try {
+      // Primary quote lookup
       const quote = await fetchSingleQuote(r.symbol);
-      if (quote?.price && quote.price > 0) {
-        setPrice(String(quote.price));
+      let foundPrice = quote?.price && quote.price > 0 ? quote.price : null;
+      let quoteTicker = r.symbol;
+
+      // Fallback: If regional exchange (e.g. .DU, .HM, .SG) returns NO price (0, null, or undefined),
+      // try the main German exchange tickers (.DE or .F) of that same asset
+      if (!foundPrice) {
+        const baseSymbol = r.symbol.includes('.') ? r.symbol.split('.')[0] : r.symbol;
+        const fallbackTickers = [`${baseSymbol}.DE`, `${baseSymbol}.F`].filter(
+          (t) => t.toUpperCase() !== r.symbol.toUpperCase()
+        );
+
+        for (const fbTicker of fallbackTickers) {
+          try {
+            const fbQuote = await fetchSingleQuote(fbTicker);
+            if (fbQuote?.price && fbQuote.price > 0) {
+              foundPrice = fbQuote.price;
+              quoteTicker = fbTicker;
+              break;
+            }
+          } catch {
+            // continue fallback loop
+          }
+        }
+      }
+
+      if (foundPrice && foundPrice > 0) {
+        setPrice(String(foundPrice));
         setPriceFetched(true);
-        const formatted = quote.price.toLocaleString('de-DE', {
+        const formatted = foundPrice.toLocaleString('de-DE', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         });
         setLookupFeedback({
           type: 'success',
-          text: `Live-Kurs für ${sym}: ${formatted} €`,
+          text: `Live-Kurs für ${quoteTicker}: ${formatted} €`,
+        });
+      } else {
+        // If all lookups fail, leave price field blank but fully editable
+        setPrice('');
+        setPriceFetched(false);
+        setLookupFeedback({
+          type: 'info',
+          text: `Kein Live-Kurs für ${r.symbol} gefunden. Kurs bitte manuell eingeben.`,
         });
       }
     } catch {
-      // ignore
+      setPrice('');
+      setPriceFetched(false);
     } finally {
       setPriceFetching(false);
     }
   };
+
+  const handleSelectSearchResult = selectResult;
 
   // ISIN lookup
   const performIsinLookup = async (query: string, explicit = false) => {
