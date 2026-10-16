@@ -405,7 +405,7 @@ export async function lookupSecurityByIsin(rawQuery?: string | null): Promise<Is
         const best = searchResults[0];
         resolvedSymbol = best.symbol;
         resolvedName = best.name;
-        assetType = best.type;
+        assetType = best.type === 'etf' ? 'etf' : 'stock';
         const quote = await fetchSingleQuote(resolvedSymbol);
         return {
           symbol: resolvedSymbol,

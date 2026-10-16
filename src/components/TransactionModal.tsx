@@ -88,14 +88,6 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       setSearching(false);
       setLookupFeedback(null);
     }
-
-    if (!editing) {
-      const timer = setTimeout(() => {
-        symbolInputRef.current?.focus();
-      }, 150);
-
-      return () => clearTimeout(timer);
-    }
   }, [open, editing]);
 
   useEffect(() => {
