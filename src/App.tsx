@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, Briefcase, List, Settings as SettingsIcon, Plus, CloudUpload, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, Briefcase, List, Settings as SettingsIcon, Plus, Download, AlertCircle } from 'lucide-react';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { useBiometric } from '@/hooks/useBiometric';
 import { Dashboard } from '@/views/Dashboard';
@@ -120,11 +120,8 @@ function App() {
     try {
       const data: PortfolioExport = await portfolio.exportPortfolio();
       const jsonString = JSON.stringify(data, null, 2);
-      const fileName = 'portfolio.json';
 
-      // 1. Moderne File System Access API (Desktop Chrome / Edge / Opera / Safari)
-      // Öffnet den nativen Datei-Speichern-Dialog, bei dem der Speicherort explizit gewählt werden kann
-      // und der Dateiname "portfolio.json" immer vorgeschlagen wird.
+      // 1. Sichere Prüfung: Nur Chrome/Edge/Desktop-Browser nutzen showSaveFilePicker
       if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
         try {
           const pickerWindow = window as unknown as {
@@ -139,9 +136,9 @@ function App() {
             }>;
           };
           const handle = await pickerWindow.showSaveFilePicker({
-            suggestedName: fileName,
+            suggestedName: 'portfolio.json',
             types: [{
-              description: 'JSON Portfolio-Datei',
+              description: 'JSON File',
               accept: { 'application/json': ['.json'] },
             }],
           });
@@ -156,43 +153,27 @@ function App() {
             setSyncStep('idle');
             return;
           }
-          // Bei Fehlern zum nächsten Mechanismus weitergehen
+          // Bei anderen Fehlern im Picker nicht abstürzen, sondern auf Fallback leiten
         }
       }
-
-      // 2. Web Share API mit File (für iOS / iPad Safari & PWA)
-      // Öffnet auf Apple-Geräten direkt das native Teilen-Menü, in welchem "In Dateien sichern"
-      // gewählt werden kann, um den Ordner in iCloud Drive mit Dateiname "portfolio.json" explizit zu wählen.
-      const file = new File([jsonString], fileName, { type: 'application/json' });
-      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: fileName,
-          });
-          setSyncStep('done');
-          setTimeout(() => setSyncStep('idle'), 2500);
-          return;
-        } catch (err: unknown) {
-          if ((err as Error)?.name === 'AbortError') {
-            setSyncStep('idle');
-            return;
-          }
-        }
-      }
-
-      // 3. Fallback: Datei mit Dateiname "portfolio.json"
+    
+      // 2. Absolut sicherer Fallback für iOS (Safari / PWA)
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
+      
+      // iOS-spezifischer Sicherheits-Check: Falls der State-Wechsel hakt,
+      // stellen wir sicher, dass die URL existiert, bevor das Modal triggert.
       if (url) {
         setIosBlobUrl(url);
         setSyncStep('modal');
       } else {
         throw new Error('Blob URL creation failed');
       }
+
     } catch (error) {
-      console.error('Sync-Fehler abgefangen:', error);
+      console.error("Sync-Fehler abgefangen:", error);
       setSyncStep('idle');
+      // Verhindert den White Screen, indem der Fehler niemals die App reißt
     }
   }
 
@@ -269,18 +250,18 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 dark:border-gray-800">
             <div className="flex items-center gap-3 text-green-600 dark:text-green-400 mb-4">
-              <CloudUpload size={28} />
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">In iCloud sichern</h3>
+              <Download size={28} />
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Backup in iCloud sichern</h3>
             </div>
 
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-5 leading-relaxed">
-              Deine aktuellen Portfoliodaten sind bereit. Tippe unten auf den Button, um den Zielordner in iCloud auszuwählen. Die Datei wird als <strong>portfolio.json</strong> gespeichert.
+              Deine aktuellen Portfoliodaten sind bereit. Tippe unten auf den Button, um den Speicherort (deinen iCloud-Ordner) selbst auszuwählen.
             </p>
 
             <div className="flex gap-2 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-200/50 dark:border-amber-900/30 mb-5">
               <AlertCircle className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={16} />
               <p className="text-xs text-amber-800 dark:text-amber-300">
-                <strong>iOS-Tipp:</strong> Wähle im Teilen-Menü <em>"In Dateien sichern"</em> und bestimme deinen iCloud-Ordner.
+                <strong>iOS-Tipp:</strong> Falls die Datei automatisch heruntergeladen wird, stelle in den iPhone-Einstellungen unter <em>Safari &rarr; Downloads</em> auf <strong>"Jedes Mal fragen"</strong>.
               </p>
             </div>
 
@@ -297,8 +278,8 @@ function App() {
                 }}
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-green-600/20 active:scale-95 transition-transform"
               >
-                <CloudUpload size={18} />
-                Speicherort für portfolio.json wählen
+                <Download size={18} />
+                Speicherort wählen
               </a>
               <button
                 onClick={() => {
