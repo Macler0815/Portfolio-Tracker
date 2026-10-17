@@ -214,6 +214,7 @@ function App() {
           error={portfolio.error}
           onRefresh={() => portfolio.refreshPrices(true)}
           onICloudSync={handleICloudSync}
+          onICloudLoad={portfolio.importPortfolio}
           syncing={syncStep === 'saving'}
           syncDone={syncStep === 'done'}
           hasApiKey={hasApiKey}

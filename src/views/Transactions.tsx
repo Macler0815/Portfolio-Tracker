@@ -50,7 +50,7 @@ export function TransactionsView({ transactions, onEdit, onDelete }: Transaction
                 <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   <span>{formatDate(t.date)}</span>
                   <span>·</span>
-                  <span>{formatNumber(t.quantity)} × {formatCurrency(t.price)}</span>
+                  <span>{formatNumber(t.quantity, 0)} × {formatCurrency(t.price)}</span>
                   {t.note && (
                     <>
                       <span>·</span>
@@ -66,8 +66,8 @@ export function TransactionsView({ transactions, onEdit, onDelete }: Transaction
                 </div>
               </button>
               <div className="text-right shrink-0">
-                <p className={`font-semibold text-sm ${isBuy ? 'text-gray-900 dark:text-white' : 'text-red-600 dark:text-red-400'}`}>
-                  {isBuy ? '−' : '+'}{formatCurrency(total)}
+                <p className={`font-semibold text-sm ${isBuy ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {isBuy ? '+' : '−'}{formatCurrency(total)}
                 </p>
               </div>
               <button

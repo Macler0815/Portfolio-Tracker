@@ -1,4 +1,5 @@
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudUpload, CheckCircle2, Loader2, Info } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
 import { formatCurrency, formatPercent, formatNumber, timeAgo } from '@/lib/format';
 
@@ -12,16 +13,72 @@ interface DashboardProps {
   error: string | null;
   onRefresh: () => void;
   onICloudSync: () => void;
+  onICloudLoad?: (data: import('@/lib/types').PortfolioExport) => Promise<void> | void;
   syncing: boolean;
   syncDone: boolean;
   hasApiKey: boolean;
 }
 
-export function Dashboard({ summary, holdings, refreshing, lastRefresh, error, onRefresh, onICloudSync, syncing, syncDone, hasApiKey }: DashboardProps) {
+export function Dashboard({
+  summary,
+  holdings,
+  refreshing,
+  lastRefresh,
+  error,
+  onRefresh,
+  onICloudSync,
+  onICloudLoad,
+  syncing,
+  syncDone,
+  hasApiKey,
+}: DashboardProps) {
   const plPositive = summary.totalPL >= 0;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const handleTriggerLoad = () => {
+    setLoadError(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoadState('loading');
+    setLoadError(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data || !Array.isArray(data.transactions)) {
+        throw new Error('Ungültiges Portfolio-Format');
+      }
+      if (onICloudLoad) {
+        await onICloudLoad(data);
+      }
+      setLoadState('done');
+      setTimeout(() => setLoadState('idle'), 3000);
+    } catch (err) {
+      console.error('iCloud-Laden Fehler:', err);
+      setLoadState('error');
+      setLoadError('Datei konnte nicht geladen werden');
+      setTimeout(() => setLoadState('idle'), 4000);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div className="px-4 pt-2 pb-24 space-y-5 max-w-2xl mx-auto">
+      {/* Hidden file input for iCloud-Laden */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -40,35 +97,72 @@ export function Dashboard({ summary, holdings, refreshing, lastRefresh, error, o
         </button>
       </div>
 
-      {/* iCloud Sync Button */}
-      <button
-        onClick={onICloudSync}
-        disabled={syncing || holdings.length === 0}
-        className="w-full flex items-center justify-between rounded-2xl bg-green-600 text-white px-5 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
-      >
-        <div className="flex items-center gap-3">
-          {syncing ? (
-            <Loader2 size={22} className="animate-spin" />
-          ) : syncDone ? (
-            <CheckCircle2 size={22} />
-          ) : (
-            <CloudUpload size={22} />
-          )}
-          <div className="text-left">
-            <p className="text-sm font-semibold">
-              {syncing ? 'Backup wird erstellt…' : syncDone ? 'Gesichert!' : 'iCloud-Backup'}
-            </p>
-            <p className="text-xs text-green-100">
-              {syncDone ? 'portfolio.json bereitgestellt' : 'Tippe hier, um deine Daten für iPad/Mac in der iCloud bereitzustellen.'}
-            </p>
+      {/* iCloud-Speichern & iCloud-Laden */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* iCloud-Speichern Button */}
+        <button
+          type="button"
+          onClick={onICloudSync}
+          disabled={syncing || holdings.length === 0}
+          className="w-full flex items-center justify-between rounded-2xl bg-green-600 text-white px-5 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
+        >
+          <div className="flex items-center gap-3">
+            {syncing ? (
+              <Loader2 size={22} className="animate-spin shrink-0" />
+            ) : syncDone ? (
+              <CheckCircle2 size={22} className="shrink-0" />
+            ) : (
+              <CloudUpload size={22} className="shrink-0" />
+            )}
+            <div>
+              <p className="text-sm font-semibold">
+                {syncing ? 'Backup wird erstellt…' : syncDone ? 'Gesichert!' : 'iCloud-Speichern'}
+              </p>
+              <p className="text-xs text-green-100">
+                {syncDone ? 'portfolio.json bereitgestellt' : 'Speichere hier deine Daten in iCloud'}
+              </p>
+            </div>
           </div>
-        </div>
-        {!syncing && !syncDone && (
-          <span className="text-xs font-medium text-green-100 bg-white/20 rounded-full px-2.5 py-1 shrink-0">
-            iCloud
-          </span>
-        )}
-      </button>
+          {!syncing && !syncDone && (
+            <span className="text-xs font-medium text-green-100 bg-white/20 rounded-full px-2.5 py-1 shrink-0 ml-2">
+              iCloud
+            </span>
+          )}
+        </button>
+
+        {/* iCloud-Laden Button */}
+        <button
+          type="button"
+          onClick={handleTriggerLoad}
+          disabled={loadState === 'loading'}
+          className="w-full flex items-center justify-between rounded-2xl bg-green-600 text-white px-5 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
+        >
+          <div className="flex items-center gap-3">
+            {loadState === 'loading' ? (
+              <Loader2 size={22} className="animate-spin shrink-0" />
+            ) : loadState === 'done' ? (
+              <CheckCircle2 size={22} className="shrink-0" />
+            ) : (
+              <CloudDownload size={22} className="shrink-0" />
+            )}
+            <div>
+              <p className="text-sm font-semibold">
+                {loadState === 'loading' ? 'Lade Daten…' : loadState === 'done' ? 'Geladen!' : 'iCloud-Laden'}
+              </p>
+              <p className="text-xs text-green-100">
+                {loadState === 'done'
+                  ? 'Portfolio erfolgreich geladen'
+                  : loadError || 'Lade hier deine Daten aus der iCloud'}
+              </p>
+            </div>
+          </div>
+          {loadState === 'idle' && (
+            <span className="text-xs font-medium text-green-100 bg-white/20 rounded-full px-2.5 py-1 shrink-0 ml-2">
+              iCloud
+            </span>
+          )}
+        </button>
+      </div>
 
       {!hasApiKey && holdings.length > 0 && (
         <div className="flex items-start gap-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3.5 py-3">
