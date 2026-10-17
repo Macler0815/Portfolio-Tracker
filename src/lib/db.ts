@@ -37,6 +37,10 @@ function openDB(): Promise<IDBDatabase> {
       };
       req.onblocked = () => {
         console.warn('IndexedDB blocked by other tabs or processes');
+        setTimeout(() => {
+          dbPromise = null;
+          reject(new Error('IndexedDB blocked'));
+        }, 1500);
       };
     } catch (err) {
       dbPromise = null;

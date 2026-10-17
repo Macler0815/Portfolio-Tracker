@@ -52,8 +52,9 @@ export function useBiometric() {
         }
 
         try {
-          const available =
-            await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500));
+          const checkPromise = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(() => false);
+          const available = await Promise.race([checkPromise, timeoutPromise]);
           if (!available) {
             if (!cancelled) setState('unsupported');
             return;

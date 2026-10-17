@@ -32,7 +32,15 @@ export function Dashboard({
   syncDone,
   hasApiKey,
 }: DashboardProps) {
-  const plPositive = summary.totalPL >= 0;
+  const safeSummary = summary || {
+    totalValue: 0,
+    totalInvested: 0,
+    totalPL: 0,
+    totalPLPercent: 0,
+    holdings: [],
+  };
+  const safeHoldings = Array.isArray(holdings) ? holdings.filter(Boolean) : [];
+  const plPositive = (safeSummary.totalPL || 0) >= 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -186,15 +194,15 @@ export function Dashboard({
           <Wallet size={16} />
           <span className="text-sm font-medium">Gesamtwert</span>
         </div>
-        <p className="text-4xl font-bold tracking-tight">{formatCurrency(summary.totalValue)}</p>
+        <p className="text-4xl font-bold tracking-tight">{formatCurrency(safeSummary.totalValue)}</p>
         <div className="mt-4 flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             {plPositive ? <TrendingUp size={18} className="text-green-400" /> : <TrendingDown size={18} className="text-red-400" />}
             <span className={`text-lg font-semibold ${plPositive ? 'text-green-400' : 'text-red-400'}`}>
-              {formatCurrency(Math.abs(summary.totalPL))}
+              {formatCurrency(Math.abs(safeSummary.totalPL))}
             </span>
             <span className={`text-sm ${plPositive ? 'text-green-400' : 'text-red-400'}`}>
-              {formatPercent(summary.totalPLPercent)}
+              {formatPercent(safeSummary.totalPLPercent)}
             </span>
           </div>
         </div>
@@ -204,31 +212,39 @@ export function Dashboard({
               <PiggyBank size={14} />
               <span className="text-xs">Investiert</span>
             </div>
-            <p className="text-sm font-semibold">{formatCurrency(summary.totalInvested)}</p>
+            <p className="text-sm font-semibold">{formatCurrency(safeSummary.totalInvested)}</p>
           </div>
           <div>
             <span className="text-xs text-gray-400 block mb-0.5">Positionen</span>
-            <p className="text-sm font-semibold">{holdings.length}</p>
+            <p className="text-sm font-semibold">{safeHoldings.length}</p>
           </div>
         </div>
       </div>
 
       {/* Alle Positionen */}
-      {holdings.length > 0 && (
+      {safeHoldings.length > 0 && (
         <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
           <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Alle Positionen</h2>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {holdings.map((h, idx) => {
-              const price = h.price ?? h.currentPrice;
-              const totalValue = (h.quantity && price && price > 0)
-                ? (h.quantity * price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
+            {safeHoldings.map((h, idx) => {
+              if (!h) return null;
+              const quantity = Math.round(h.quantity || 0);
+              const price = typeof h.currentPrice === 'number' && !isNaN(h.currentPrice)
+                ? h.currentPrice
+                : typeof h.price === 'number' && !isNaN(h.price)
+                ? h.price
+                : 0;
+              const totalValue = (quantity > 0 && price > 0)
+                ? (quantity * price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
                 : '—';
+              const symbol = h.symbol || '—';
+              const name = h.name || symbol;
 
               return (
-                <div key={h.symbol || idx} className={`space-y-2 ${idx > 0 ? 'pt-3.5 mt-3.5' : ''}`}>
+                <div key={h.symbol ? `${h.symbol}-${idx}` : `pos-${idx}`} className={`space-y-2 ${idx > 0 ? 'pt-3.5 mt-3.5' : ''}`}>
                   {/* 1. THE ASSET BLOCK (Top Line) */}
                   <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                    {h.symbol} · {h.name}
+                    {symbol} · {name}
                   </p>
 
                   {/* 2. THE NUMERIC FINANCIAL GRID (Bottom Line) */}
@@ -236,19 +252,19 @@ export function Dashboard({
                     <div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Menge</span>
                       <span className="text-sm font-medium text-gray-900 dark:text-white block mt-0.5">
-                        {formatNumber(h.quantity, 0)} Stk.
+                        {formatNumber(quantity, 0)} Stk.
                       </span>
                     </div>
                     <div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Kaufkurs</span>
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block mt-0.5">
-                        {formatCurrency(h.avgBuyPrice)}
+                        {formatCurrency(h.avgBuyPrice || 0)}
                       </span>
                     </div>
                     <div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Aktuell</span>
                       <span className="text-sm font-medium text-gray-900 dark:text-white block mt-0.5">
-                        {formatCurrency(h.currentPrice)}
+                        {price > 0 ? formatCurrency(price) : '—'}
                       </span>
                     </div>
                     <div className="text-right">
@@ -265,7 +281,7 @@ export function Dashboard({
         </div>
       )}
 
-      {holdings.length === 0 && (
+      {safeHoldings.length === 0 && (
         <div className="text-center py-16">
           <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
             <Wallet size={28} className="text-gray-400" />

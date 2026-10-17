@@ -178,7 +178,7 @@ function App() {
   }
 
 
-  const currentPrices = new Map(portfolio.holdings.map((h) => [h.symbol, h.currentPrice]));
+  const currentPrices = new Map((portfolio.holdings || []).map((h) => [h?.symbol || '', h?.currentPrice || 0]));
 
   if (bio.state !== 'unlocked') {
     if (bio.state === 'checking' || portfolio.loading) {

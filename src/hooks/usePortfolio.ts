@@ -41,11 +41,15 @@ export function usePortfolio() {
   // Load all data from IndexedDB on mount
   const loadData = useCallback(async () => {
     try {
-      const [txs, cachedPrices, manual] = await Promise.all([
+      const dbPromise = Promise.all([
         getAllTransactions().catch(() => []),
         getAllPriceQuotes().catch(() => new Map()),
         getAllManualPrices().catch(() => new Map()),
       ]);
+      const timeoutPromise = new Promise<[Transaction[], Map<string, { price: number; fetchedAt: number }>, Map<string, { price: number; setAt: number }>]>((resolve) =>
+        setTimeout(() => resolve([[], new Map(), new Map()]), 2000)
+      );
+      const [txs, cachedPrices, manual] = await Promise.race([dbPromise, timeoutPromise]);
       if (!mountedRef.current) return;
       const safeTxs = Array.isArray(txs) ? txs.filter(Boolean) : [];
       setTransactions(safeTxs.sort((a, b) => ((b && b.date) || '').localeCompare((a && a.date) || '')));
