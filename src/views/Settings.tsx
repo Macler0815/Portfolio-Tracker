@@ -194,9 +194,18 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const text = await file.text();
+      const text = await new Promise<string>((resolve, reject) => {
+        if (typeof file.text === 'function') {
+          file.text().then(resolve).catch(reject);
+        } else {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsText(file);
+        }
+      });
       const data = JSON.parse(text) as PortfolioExport;
-      if (!data.version || !Array.isArray(data.transactions)) {
+      if (!data || !Array.isArray(data.transactions)) {
         throw new Error('Invalid format');
       }
       await onImport(data);

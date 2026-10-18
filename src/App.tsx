@@ -269,12 +269,14 @@ function App() {
               <a
                 href={iosBlobUrl}
                 download="portfolio.json"
+                target="_blank"
+                rel="noopener"
                 onClick={() => {
                   setSyncStep('done');
                   setTimeout(() => {
                     setSyncStep('idle');
                     URL.revokeObjectURL(iosBlobUrl);
-                  }, 2000);
+                  }, 2500);
                 }}
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-green-600/20 active:scale-95 transition-transform"
               >

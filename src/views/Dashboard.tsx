@@ -56,7 +56,16 @@ export function Dashboard({
     setLoadState('loading');
     setLoadError(null);
     try {
-      const text = await file.text();
+      const text = await new Promise<string>((resolve, reject) => {
+        if (typeof file.text === 'function') {
+          file.text().then(resolve).catch(reject);
+        } else {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsText(file);
+        }
+      });
       const data = JSON.parse(text);
       if (!data || !Array.isArray(data.transactions)) {
         throw new Error('Ungültiges Portfolio-Format');
@@ -111,7 +120,7 @@ export function Dashboard({
         <button
           type="button"
           onClick={onICloudSync}
-          disabled={syncing || holdings.length === 0}
+          disabled={syncing || safeHoldings.length === 0}
           className="w-full flex items-center justify-between rounded-2xl bg-green-600 text-white px-5 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
         >
           <div className="flex items-center gap-3">
@@ -172,7 +181,7 @@ export function Dashboard({
         </button>
       </div>
 
-      {!hasApiKey && holdings.length > 0 && (
+      {!hasApiKey && safeHoldings.length > 0 && (
         <div className="flex items-start gap-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3.5 py-3">
           <Info size={18} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
           <p className="text-sm text-blue-800 dark:text-blue-200">

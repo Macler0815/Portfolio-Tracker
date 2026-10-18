@@ -203,22 +203,46 @@ export function usePortfolio() {
 
   // Export / Import
   const exportPortfolio = useCallback(async (): Promise<PortfolioExport> => {
-    const [txs, manual] = await Promise.all([getAllTransactions(), getAllManualPrices()]);
-    return {
-      version: 1,
-      exportedAt: Date.now(),
-      transactions: txs,
-      manualPrices: Array.from(manual.entries()).map(([symbol, v]) => ({ symbol, price: v.price, setAt: v.setAt })),
-    };
+    try {
+      const [txs, manual] = await Promise.all([
+        getAllTransactions().catch(() => []),
+        getAllManualPrices().catch(() => new Map()),
+      ]);
+      const safeTxs = Array.isArray(txs) ? txs.filter(Boolean) : [];
+      const safeManual = manual instanceof Map ? manual : new Map();
+      return {
+        version: 1,
+        exportedAt: Date.now(),
+        transactions: safeTxs,
+        manualPrices: Array.from(safeManual.entries()).map(([symbol, v]) => ({
+          symbol,
+          price: v?.price || 0,
+          setAt: v?.setAt || Date.now(),
+        })),
+      };
+    } catch {
+      return {
+        version: 1,
+        exportedAt: Date.now(),
+        transactions: [],
+        manualPrices: [],
+      };
+    }
   }, []);
 
   const importPortfolio = useCallback(async (data: PortfolioExport) => {
-    await clearAllData();
-    for (const t of data.transactions) {
-      await putTransaction(t);
+    if (!data || typeof data !== 'object') {
+      throw new Error('Ungültiges Portfolio-Format');
     }
-    for (const p of data.manualPrices) {
-      await putManualPrice(p);
+    const safeTxs = Array.isArray(data.transactions) ? data.transactions.filter(Boolean) : [];
+    const safeManuals = Array.isArray(data.manualPrices) ? data.manualPrices.filter(Boolean) : [];
+
+    await clearAllData();
+    for (const t of safeTxs) {
+      if (t && t.id) await putTransaction(t);
+    }
+    for (const p of safeManuals) {
+      if (p && p.symbol) await putManualPrice(p);
     }
     await loadData();
   }, [loadData]);
