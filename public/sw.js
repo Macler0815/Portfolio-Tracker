@@ -1,4 +1,4 @@
-const CACHE_NAME = 'portfolio-tracker-v14';
+const CACHE_NAME = 'portfolio-tracker-v15';
 
 // Service Worker lifecycle & cache logger
 function logSW(action, ...args) {
