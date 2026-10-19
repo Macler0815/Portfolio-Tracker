@@ -117,96 +117,22 @@ function App() {
   async function handleICloudSync() {
     setSyncStep('saving');
     try {
-      // 1. Safely fetch data using dynamic access to avoid type mismatches
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const currentPortfolio = portfolio || (typeof window !== 'undefined' && (window as any).portfolio) || (typeof globalThis !== 'undefined' && (globalThis as any).portfolio);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let portfolioData: any;
-
-      if (currentPortfolio && typeof currentPortfolio.exportPortfolio === 'function') {
-        portfolioData = await currentPortfolio.exportPortfolio();
-      } else {
-        // Fallback if portfolio instance is imported differently in this scope
-        throw new Error('Portfolio instance not found in scope');
-      }
-
-      const jsonString = JSON.stringify(portfolioData, null, 2);
-      const fileName = 'portfolio.json';
-
-      // 2. Safe Web Share Check for iOS Safari
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const nav = (typeof navigator !== 'undefined' ? navigator : null) as any;
-      let canShareFiles = false;
-
-      if (nav && typeof nav.share === 'function') {
-        try {
-          const testFile = new File([jsonString], fileName, { type: 'application/json' });
-          canShareFiles = !!(nav.canShare && nav.canShare({ files: [testFile] }));
-        } catch {
-          canShareFiles = false;
-        }
-      }
-
-      if (canShareFiles && nav) {
-        try {
-          const fileToShare = new File([jsonString], fileName, { type: 'application/json' });
-          await nav.share({
-            files: [fileToShare],
-            title: '',
-            text: '',
-          });
-          setSyncStep('done');
-          setTimeout(() => setSyncStep('idle'), 2500);
-          return;
-        } catch (err: unknown) {
-          if ((err as Error)?.name === 'AbortError') {
-            setSyncStep('idle');
-            return;
-          }
-        }
-      }
-
-      // 3. Desktop File System Access API Fallback
-      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const handle = await (window as any).showSaveFilePicker({
-            suggestedName: fileName,
-            types: [{
-              description: 'JSON File',
-              accept: { 'application/json': ['.json'] },
-            }],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(jsonString);
-          await writable.close();
-          setSyncStep('done');
-          setTimeout(() => setSyncStep('idle'), 2500);
-          return;
-        } catch (err: unknown) {
-          if ((err as Error)?.name === 'AbortError') {
-            setSyncStep('idle');
-            return;
-          }
-        }
-      }
-
-      // 4. Ultimate Fallback: Traditional Blob download
+      const data = await portfolio.exportPortfolio();
+      const jsonString = JSON.stringify(data, null, 2);
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = fileName;
+      a.download = 'portfolio.json';
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 2500);
-
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       setSyncStep('done');
       setTimeout(() => setSyncStep('idle'), 2500);
-    } catch (error) {
-      console.error('Sync-Fehler abgefangen:', error);
+    } catch (err) {
+      console.error('Export fehlgeschlagen:', err);
       setSyncStep('idle');
     }
   }
