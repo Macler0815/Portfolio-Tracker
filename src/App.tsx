@@ -144,7 +144,6 @@ function App() {
         try {
           await navigator.share({
             files: [file],
-            title: fileName,
           });
           setSyncStep('done');
           setTimeout(() => setSyncStep('idle'), 2500);
