@@ -1,4 +1,4 @@
-const CACHE_NAME = 'portfolio-tracker-v22';
+const CACHE_NAME = 'portfolio-tracker-v23';
 
 // Service Worker lifecycle & cache logger
 function logSW(action, ...args) {
@@ -36,6 +36,11 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Never intercept Vite development server modules or hot reloads
+  if (url.pathname.startsWith('/@') || url.pathname.startsWith('/src/') || url.pathname.startsWith('/node_modules/') || url.search.includes('t=')) {
+    return;
+  }
 
   // ALL requests on same origin: NETWORK-FIRST, cache fallback
   // This completely eliminates stale/broken JS asset locks on iOS/iPhones
