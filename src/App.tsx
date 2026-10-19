@@ -121,20 +121,23 @@ function App() {
       const jsonString = JSON.stringify(portfolioData, null, 2);
       const file = new File([jsonString], 'portfolio.json', { type: 'application/json' });
 
-      // Check if navigator.canShare and navigator.share are available for files (crucial for iOS Safari)
+      // Safe type casting to prevent TypeScript from crashing the build
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nav = (typeof navigator !== 'undefined' ? navigator : null) as any;
       let canShareFiles = false;
-      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+
+      if (nav && typeof nav.share === 'function') {
         try {
-          canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+          canShareFiles = !!(nav.canShare && nav.canShare({ files: [file] }));
         } catch {
           canShareFiles = false;
         }
       }
 
-      // If available, trigger native system share dialog with empty title/text to override iOS defaults
-      if (canShareFiles) {
+      // If available, trigger native system share dialog
+      if (canShareFiles && nav) {
         try {
-          await navigator.share({
+          await nav.share({
             files: [file],
             title: '',
             text: '',
@@ -188,7 +191,7 @@ function App() {
         }
       }
 
-      // 4. Fallback: Traditional Blob download via hidden <a> tag
+      // Fallback: Traditional Blob download via hidden <a> tag
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
