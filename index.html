@@ -21,18 +21,6 @@
     <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
   </head>
   <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased selection:bg-green-500/20">
-    <script>
-      window.addEventListener('error', function(e) {
-        var r = document.getElementById('root');
-        if (r && !r.hasChildNodes()) {
-          r.innerHTML = '<div style="padding:24px;color:#ef4444;font-family:system-ui,-apple-system,sans-serif;background:#09090b;min-height:100vh;">' +
-            '<h2 style="font-size:18px;margin-bottom:8px;">App-Startfehler</h2>' +
-            '<p style="font-size:13px;color:#a1a1aa;margin-bottom:16px;">' + (e.message || 'Unbekannter Fehler') + '</p>' +
-            '<button onclick="localStorage.clear();sessionStorage.clear();if(\'serviceWorker\' in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){regs.forEach(function(r){r.unregister();});});}window.location.reload(true);" style="background:#16a34a;color:#fff;border:none;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">Cache bereinigen & Neu laden</button>' +
-            '</div>';
-        }
-      });
-    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>

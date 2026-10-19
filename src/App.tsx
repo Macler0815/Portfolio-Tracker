@@ -9,7 +9,7 @@ import { SettingsView } from '@/views/Settings';
 import { TransactionModal } from '@/components/TransactionModal';
 import { PriceEditModal } from '@/components/PriceEditModal';
 import { LockScreen } from '@/components/LockScreen';
-import type { Transaction, Holding } from '@/lib/types';
+import type { Transaction, Holding, PortfolioExport } from '@/lib/types';
 import { getApiKeyConfig } from '@/lib/api';
 
 type Tab = 'dashboard' | 'holdings' | 'transactions' | 'settings';
@@ -117,22 +117,98 @@ function App() {
   async function handleICloudSync() {
     setSyncStep('saving');
     try {
-      const data = await portfolio.exportPortfolio();
+      const data: PortfolioExport = await portfolio.exportPortfolio();
       const jsonString = JSON.stringify(data, null, 2);
+      const fileName = 'portfolio.json';
+
+      // 1. Create an actual File object from the portfolio JSON data with the exact filename portfolio.json
+      let file: File | null = null;
+      try {
+        file = new File([jsonString], fileName, { type: 'application/json' });
+      } catch {
+        file = null;
+      }
+
+      // 2. Check if navigator.canShare and navigator.share are available for files (crucial for iOS Safari)
+      let canShareFiles = false;
+      if (file && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+          canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+        } catch {
+          canShareFiles = false;
+        }
+      }
+
+      // 3. If available, trigger the native system share dialog so that the user can choose 'Save to Files' to store it in iCloud Drive
+      if (file && canShareFiles) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: fileName,
+          });
+          setSyncStep('done');
+          setTimeout(() => setSyncStep('idle'), 2500);
+          return;
+        } catch (err: unknown) {
+          if ((err as Error)?.name === 'AbortError') {
+            setSyncStep('idle');
+            return;
+          }
+          // On other errors, continue to desktop/blob fallback
+        }
+      }
+
+      // Desktop File System Access API (if available on desktop Chrome/Edge)
+      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+        try {
+          const pickerWindow = window as unknown as {
+            showSaveFilePicker: (options?: {
+              suggestedName?: string;
+              types?: Array<{ description: string; accept: Record<string, string[]> }>;
+            }) => Promise<{
+              createWritable: () => Promise<{
+                write: (content: string) => Promise<void>;
+                close: () => Promise<void>;
+              }>;
+            }>;
+          };
+          const handle = await pickerWindow.showSaveFilePicker({
+            suggestedName: fileName,
+            types: [{
+              description: 'JSON File',
+              accept: { 'application/json': ['.json'] },
+            }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(jsonString);
+          await writable.close();
+          setSyncStep('done');
+          setTimeout(() => setSyncStep('idle'), 2500);
+          return;
+        } catch (err: unknown) {
+          if ((err as Error)?.name === 'AbortError') {
+            setSyncStep('idle');
+            return;
+          }
+        }
+      }
+
+      // 4. Fallback: Traditional Blob download via hidden <a> tag
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'portfolio.json';
+      a.download = fileName;
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setTimeout(() => URL.revokeObjectURL(url), 2500);
+
       setSyncStep('done');
       setTimeout(() => setSyncStep('idle'), 2500);
-    } catch (err) {
-      console.error('Export fehlgeschlagen:', err);
+    } catch (error) {
+      console.error('Sync-Fehler abgefangen:', error);
       setSyncStep('idle');
     }
   }
