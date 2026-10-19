@@ -117,21 +117,13 @@ function App() {
   async function handleICloudSync() {
     setSyncStep('saving');
     try {
-      const data: PortfolioExport = await portfolio.exportPortfolio();
-      const jsonString = JSON.stringify(data, null, 2);
-      const fileName = 'portfolio.json';
+      const portfolioData: PortfolioExport = await portfolio.exportPortfolio();
+      const jsonString = JSON.stringify(portfolioData, null, 2);
+      const file = new File([jsonString], 'portfolio.json', { type: 'application/json' });
 
-      // 1. Create an actual File object from the portfolio JSON data with the exact filename portfolio.json
-      let file: File | null = null;
-      try {
-        file = new File([jsonString], fileName, { type: 'application/json' });
-      } catch {
-        file = null;
-      }
-
-      // 2. Check if navigator.canShare and navigator.share are available for files (crucial for iOS Safari)
+      // Check if navigator.canShare and navigator.share are available for files (crucial for iOS Safari)
       let canShareFiles = false;
-      if (file && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
         try {
           canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
         } catch {
@@ -139,11 +131,13 @@ function App() {
         }
       }
 
-      // 3. If available, trigger the native system share dialog so that the user can choose 'Save to Files' to store it in iCloud Drive
-      if (file && canShareFiles) {
+      // If available, trigger native system share dialog with empty title/text to override iOS defaults
+      if (canShareFiles) {
         try {
           await navigator.share({
             files: [file],
+            title: '',
+            text: '',
           });
           setSyncStep('done');
           setTimeout(() => setSyncStep('idle'), 2500);
@@ -156,6 +150,8 @@ function App() {
           // On other errors, continue to desktop/blob fallback
         }
       }
+
+      const fileName = 'portfolio.json';
 
       // Desktop File System Access API (if available on desktop Chrome/Edge)
       if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
