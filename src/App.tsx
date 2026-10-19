@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, Briefcase, List, Settings as SettingsIcon, Plus, Download, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, Briefcase, List, Settings as SettingsIcon, Plus } from 'lucide-react';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { useBiometric } from '@/hooks/useBiometric';
 import { Dashboard } from '@/views/Dashboard';
@@ -20,8 +20,7 @@ function App() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [priceModalOpen, setPriceModalOpen] = useState(false);
   const [priceHolding, setPriceHolding] = useState<Holding | null>(null);
-  const [syncStep, setSyncStep] = useState<'idle' | 'saving' | 'modal' | 'done'>('idle');
-  const [iosBlobUrl, setIosBlobUrl] = useState<string>('');
+  const [syncStep, setSyncStep] = useState<'idle' | 'saving' | 'done'>('idle');
 
   const portfolio = usePortfolio();
   const bio = useBiometric();
@@ -120,8 +119,46 @@ function App() {
     try {
       const data: PortfolioExport = await portfolio.exportPortfolio();
       const jsonString = JSON.stringify(data, null, 2);
+      const fileName = 'portfolio.json';
 
-      // 1. Sichere Prüfung: Nur Chrome/Edge/Desktop-Browser nutzen showSaveFilePicker
+      // 1. Create an actual File object from the portfolio JSON data with the exact filename portfolio.json
+      let file: File | null = null;
+      try {
+        file = new File([jsonString], fileName, { type: 'application/json' });
+      } catch {
+        file = null;
+      }
+
+      // 2. Check if navigator.canShare and navigator.share are available for files (crucial for iOS Safari)
+      let canShareFiles = false;
+      if (file && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+          canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+        } catch {
+          canShareFiles = false;
+        }
+      }
+
+      // 3. If available, trigger the native system share dialog so that the user can choose 'Save to Files' to store it in iCloud Drive
+      if (file && canShareFiles) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: fileName,
+          });
+          setSyncStep('done');
+          setTimeout(() => setSyncStep('idle'), 2500);
+          return;
+        } catch (err: unknown) {
+          if ((err as Error)?.name === 'AbortError') {
+            setSyncStep('idle');
+            return;
+          }
+          // On other errors, continue to desktop/blob fallback
+        }
+      }
+
+      // Desktop File System Access API (if available on desktop Chrome/Edge)
       if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
         try {
           const pickerWindow = window as unknown as {
@@ -136,7 +173,7 @@ function App() {
             }>;
           };
           const handle = await pickerWindow.showSaveFilePicker({
-            suggestedName: 'portfolio.json',
+            suggestedName: fileName,
             types: [{
               description: 'JSON File',
               accept: { 'application/json': ['.json'] },
@@ -153,27 +190,26 @@ function App() {
             setSyncStep('idle');
             return;
           }
-          // Bei anderen Fehlern im Picker nicht abstürzen, sondern auf Fallback leiten
         }
       }
-    
-      // 2. Absolut sicherer Fallback für iOS (Safari / PWA)
+
+      // 4. Fallback: Traditional Blob download via hidden <a> tag
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      
-      // iOS-spezifischer Sicherheits-Check: Falls der State-Wechsel hakt,
-      // stellen wir sicher, dass die URL existiert, bevor das Modal triggert.
-      if (url) {
-        setIosBlobUrl(url);
-        setSyncStep('modal');
-      } else {
-        throw new Error('Blob URL creation failed');
-      }
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2500);
 
+      setSyncStep('done');
+      setTimeout(() => setSyncStep('idle'), 2500);
     } catch (error) {
-      console.error("Sync-Fehler abgefangen:", error);
+      console.error('Sync-Fehler abgefangen:', error);
       setSyncStep('idle');
-      // Verhindert den White Screen, indem der Fehler niemals die App reißt
     }
   }
 
@@ -245,57 +281,6 @@ function App() {
         />
       )}
 
-      {/* iOS iCloud Sync Modal */}
-      {syncStep === 'modal' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 dark:border-gray-800">
-            <div className="flex items-center gap-3 text-green-600 dark:text-green-400 mb-4">
-              <Download size={28} />
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Backup in iCloud sichern</h3>
-            </div>
-
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5 leading-relaxed">
-              Deine aktuellen Portfoliodaten sind bereit. Tippe unten auf den Button, um den Speicherort (deinen iCloud-Ordner) selbst auszuwählen.
-            </p>
-
-            <div className="flex gap-2 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-200/50 dark:border-amber-900/30 mb-5">
-              <AlertCircle className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={16} />
-              <p className="text-xs text-amber-800 dark:text-amber-300">
-                <strong>iOS-Tipp:</strong> Falls die Datei automatisch heruntergeladen wird, stelle in den iPhone-Einstellungen unter <em>Safari &rarr; Downloads</em> auf <strong>"Jedes Mal fragen"</strong>.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <a
-                href={iosBlobUrl}
-                download="portfolio.json"
-                target="_blank"
-                rel="noopener"
-                onClick={() => {
-                  setSyncStep('done');
-                  setTimeout(() => {
-                    setSyncStep('idle');
-                    URL.revokeObjectURL(iosBlobUrl);
-                  }, 2500);
-                }}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-green-600/20 active:scale-95 transition-transform"
-              >
-                <Download size={18} />
-                Speicherort wählen
-              </a>
-              <button
-                onClick={() => {
-                  setSyncStep('idle');
-                  URL.revokeObjectURL(iosBlobUrl);
-                }}
-                className="w-full bg-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 py-2 text-sm font-medium"
-              >
-                Abbrechen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <button
         onClick={() => {
