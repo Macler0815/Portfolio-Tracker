@@ -115,13 +115,13 @@ export function Dashboard({
       </div>
 
       {/* iCloud-Speichern & iCloud-Laden */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         {/* iCloud-Speichern Button */}
         <button
           type="button"
           onClick={onICloudSync}
           disabled={syncing || safeHoldings.length === 0}
-          className="w-full flex items-center justify-between rounded-2xl bg-green-600 text-white px-5 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
+          className="w-full flex items-center justify-between rounded-2xl bg-gray-500 text-white px-5 py-4 shadow-lg shadow-gray-500/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
         >
           <div className="flex items-center gap-3">
             {syncing ? (
@@ -135,13 +135,13 @@ export function Dashboard({
               <p className="text-sm font-semibold">
                 {syncing ? 'Backup wird erstellt…' : syncDone ? 'Gesichert!' : 'iCloud-Speichern'}
               </p>
-              <p className="text-xs text-green-100">
+              <p className="text-xs text-gray-200">
                 {syncDone ? 'portfolio.json bereitgestellt' : 'Speichere hier deine Daten in iCloud'}
               </p>
             </div>
           </div>
           {!syncing && !syncDone && (
-            <span className="text-xs font-medium text-green-100 bg-white/20 rounded-full px-2.5 py-1 shrink-0 ml-2">
+            <span className="text-xs font-medium text-gray-200 bg-white/20 rounded-full px-2.5 py-1 shrink-0 ml-2">
               iCloud
             </span>
           )}
