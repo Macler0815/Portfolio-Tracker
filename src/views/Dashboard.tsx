@@ -136,7 +136,7 @@ export function Dashboard({
                 {syncing ? 'Backup wird erstellt…' : syncDone ? 'Gesichert!' : 'iCloud-Speichern'}
               </p>
               <p className="text-xs text-gray-200">
-                {syncDone ? 'portfolio.json bereitgestellt' : 'Speichere hier deine Daten in iCloud'}
+                {syncDone ? 'portfolio.json bereitgestellt' : 'Speichern'}
               </p>
             </div>
           </div>
@@ -169,7 +169,7 @@ export function Dashboard({
               <p className="text-xs text-green-100">
                 {loadState === 'done'
                   ? 'Portfolio erfolgreich geladen'
-                  : loadError || 'Lade hier deine Daten aus der iCloud'}
+                  : loadError || 'Laden'}
               </p>
             </div>
           </div>
