@@ -121,30 +121,20 @@ export function Dashboard({
           type="button"
           onClick={onICloudSync}
           disabled={syncing || safeHoldings.length === 0}
-          className="w-full flex items-center justify-between rounded-2xl bg-gray-500 text-white px-5 py-4 shadow-lg shadow-gray-500/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
+          className="w-full flex items-center justify-center rounded-2xl bg-green-600 text-white px-4 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {syncing ? (
-              <Loader2 size={22} className="animate-spin shrink-0" />
+              <Loader2 size={20} className="animate-spin shrink-0" />
             ) : syncDone ? (
-              <CheckCircle2 size={22} className="shrink-0" />
+              <CheckCircle2 size={20} className="shrink-0" />
             ) : (
-              <CloudUpload size={22} className="shrink-0" />
+              <CloudUpload size={20} className="shrink-0" />
             )}
-            <div>
-              <p className="text-sm font-semibold">
-                {syncing ? 'Backup wird erstellt…' : syncDone ? 'Gesichert!' : 'iCloud-Speichern'}
-              </p>
-              <p className="text-xs text-gray-200">
-                {syncDone ? 'portfolio.json bereitgestellt' : 'Speichern'}
-              </p>
-            </div>
-          </div>
-          {!syncing && !syncDone && (
-            <span className="text-xs font-medium text-gray-200 bg-white/20 rounded-full px-2.5 py-1 shrink-0 ml-2">
-              iCloud
+            <span className="text-sm font-semibold whitespace-nowrap">
+              {syncing ? 'Sichert…' : syncDone ? 'Gesichert!' : 'iCloud-Speichern'}
             </span>
-          )}
+          </div>
         </button>
 
         {/* iCloud-Laden Button */}
@@ -152,32 +142,28 @@ export function Dashboard({
           type="button"
           onClick={handleTriggerLoad}
           disabled={loadState === 'loading'}
-          className="w-full flex items-center justify-between rounded-2xl bg-green-600 text-white px-5 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
+          className="w-full flex items-center justify-center rounded-2xl bg-gray-500 text-white px-4 py-4 shadow-lg shadow-gray-500/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {loadState === 'loading' ? (
-              <Loader2 size={22} className="animate-spin shrink-0" />
+              <Loader2 size={20} className="animate-spin shrink-0" />
             ) : loadState === 'done' ? (
-              <CheckCircle2 size={22} className="shrink-0" />
+              <CheckCircle2 size={20} className="shrink-0" />
+            ) : loadState === 'error' ? (
+              <AlertCircle size={20} className="shrink-0 text-red-200" />
             ) : (
-              <CloudDownload size={22} className="shrink-0" />
+              <CloudDownload size={20} className="shrink-0" />
             )}
-            <div>
-              <p className="text-sm font-semibold">
-                {loadState === 'loading' ? 'Lade Daten…' : loadState === 'done' ? 'Geladen!' : 'iCloud-Laden'}
-              </p>
-              <p className="text-xs text-green-100">
-                {loadState === 'done'
-                  ? 'Portfolio erfolgreich geladen'
-                  : loadError || 'Laden'}
-              </p>
-            </div>
-          </div>
-          {loadState === 'idle' && (
-            <span className="text-xs font-medium text-green-100 bg-white/20 rounded-full px-2.5 py-1 shrink-0 ml-2">
-              iCloud
+            <span className="text-sm font-semibold whitespace-nowrap">
+              {loadState === 'loading'
+                ? 'Lädt…'
+                : loadState === 'done'
+                ? 'Geladen!'
+                : loadState === 'error'
+                ? loadError || 'Fehler!'
+                : 'iCloud-Laden'}
             </span>
-          )}
+          </div>
         </button>
       </div>
 
