@@ -114,16 +114,16 @@ export function Dashboard({
         </button>
       </div>
 
-      {/* iCloud-Speichern & iCloud-Laden (Horizontal nebeneinander) */}
-      <div className="flex gap-2 w-full" style={{ display: 'flex', gap: '8px', width: '100%' }}>
+      {/* iCloud-Speichern & iCloud-Laden */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* iCloud-Speichern Button */}
         <button
           type="button"
           onClick={onICloudSync}
           disabled={syncing || safeHoldings.length === 0}
-          className="flex-1 min-w-0 flex items-center justify-between rounded-2xl bg-green-600 text-white px-3 sm:px-5 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
+          className="w-full flex items-center justify-between rounded-2xl bg-green-600 text-white px-5 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
         >
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-3">
             {syncing ? (
               <Loader2 size={22} className="animate-spin shrink-0" />
             ) : syncDone ? (
@@ -131,17 +131,17 @@ export function Dashboard({
             ) : (
               <CloudUpload size={22} className="shrink-0" />
             )}
-            <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">
-                {syncing ? 'Sichern…' : syncDone ? 'Gesichert!' : 'iCloud-Speichern'}
+            <div>
+              <p className="text-sm font-semibold">
+                {syncing ? 'Backup wird erstellt…' : syncDone ? 'Gesichert!' : 'iCloud-Speichern'}
               </p>
-              <p className="text-xs text-green-100 truncate">
-                {syncDone ? 'portfolio.json bereit' : 'In iCloud sichern'}
+              <p className="text-xs text-green-100">
+                {syncDone ? 'portfolio.json bereitgestellt' : 'Speichere hier deine Daten in iCloud'}
               </p>
             </div>
           </div>
           {!syncing && !syncDone && (
-            <span className="hidden md:inline-block text-xs font-medium text-green-100 bg-white/20 rounded-full px-2.5 py-1 shrink-0 ml-2">
+            <span className="text-xs font-medium text-green-100 bg-white/20 rounded-full px-2.5 py-1 shrink-0 ml-2">
               iCloud
             </span>
           )}
@@ -152,9 +152,9 @@ export function Dashboard({
           type="button"
           onClick={handleTriggerLoad}
           disabled={loadState === 'loading'}
-          className="flex-1 min-w-0 flex items-center justify-between rounded-2xl bg-gray-500 text-white px-3 sm:px-5 py-4 shadow-lg shadow-gray-500/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
+          className="w-full flex items-center justify-between rounded-2xl bg-green-600 text-white px-5 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100 text-left"
         >
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-3">
             {loadState === 'loading' ? (
               <Loader2 size={22} className="animate-spin shrink-0" />
             ) : loadState === 'done' ? (
@@ -162,19 +162,19 @@ export function Dashboard({
             ) : (
               <CloudDownload size={22} className="shrink-0" />
             )}
-            <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">
-                {loadState === 'loading' ? 'Laden…' : loadState === 'done' ? 'Geladen!' : 'iCloud-Laden'}
+            <div>
+              <p className="text-sm font-semibold">
+                {loadState === 'loading' ? 'Lade Daten…' : loadState === 'done' ? 'Geladen!' : 'iCloud-Laden'}
               </p>
-              <p className="text-xs text-gray-100 truncate">
+              <p className="text-xs text-green-100">
                 {loadState === 'done'
-                  ? 'Erfolgreich geladen'
-                  : loadError || 'Aus iCloud laden'}
+                  ? 'Portfolio erfolgreich geladen'
+                  : loadError || 'Lade hier deine Daten aus der iCloud'}
               </p>
             </div>
           </div>
           {loadState === 'idle' && (
-            <span className="hidden md:inline-block text-xs font-medium text-gray-100 bg-white/20 rounded-full px-2.5 py-1 shrink-0 ml-2">
+            <span className="text-xs font-medium text-green-100 bg-white/20 rounded-full px-2.5 py-1 shrink-0 ml-2">
               iCloud
             </span>
           )}
