@@ -139,6 +139,8 @@ function App() {
         }
       }
 
+      const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent || '');
+
       // 3. If available, trigger the native system share dialog so that the user can choose 'Save to Files' to store it in iCloud Drive
       if (file && canShareFiles) {
         try {
@@ -148,12 +150,26 @@ function App() {
           setSyncStep('done');
           setTimeout(() => setSyncStep('idle'), 2500);
           return;
-        } catch (err: unknown) {
-          if ((err as Error)?.name === 'AbortError') {
-            setSyncStep('idle');
-            return;
-          }
-          // On other errors, continue to desktop/blob fallback
+        } catch {
+          // On iOS, whether aborted or error, never fall through to <a> blob click which replaces the webview with a whitescreen
+          setSyncStep('idle');
+          return;
+        }
+      }
+
+      // If on iOS and canShareFiles is not available, try navigator.share with title/text if supported
+      if (isIOS && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+          await navigator.share({
+            title: fileName,
+            text: jsonString,
+          });
+          setSyncStep('done');
+          setTimeout(() => setSyncStep('idle'), 2500);
+          return;
+        } catch {
+          setSyncStep('idle');
+          return;
         }
       }
 
@@ -192,17 +208,19 @@ function App() {
         }
       }
 
-      // 4. Fallback: Traditional Blob download via hidden <a> tag
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 2500);
+      // 4. Fallback for Desktop/Android browsers: Traditional Blob download via hidden <a> tag
+      if (!isIOS) {
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 2500);
+      }
 
       setSyncStep('done');
       setTimeout(() => setSyncStep('idle'), 2500);

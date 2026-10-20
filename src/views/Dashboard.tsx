@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
 import { formatCurrency, formatPercent, formatNumber, timeAgo } from '@/lib/format';
@@ -41,14 +41,8 @@ export function Dashboard({
   };
   const safeHoldings = Array.isArray(holdings) ? holdings.filter(Boolean) : [];
   const plPositive = (safeSummary.totalPL || 0) >= 0;
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  const handleTriggerLoad = () => {
-    setLoadError(null);
-    fileInputRef.current?.click();
-  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,20 +75,12 @@ export function Dashboard({
       setLoadError('Datei konnte nicht geladen werden');
       setTimeout(() => setLoadState('idle'), 4000);
     } finally {
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      e.target.value = '';
     }
   };
 
   return (
     <div className="px-4 pt-2 pb-24 space-y-5 max-w-2xl mx-auto">
-      {/* Hidden file input for iCloud-Laden */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json,application/json"
-        onChange={handleFileChange}
-        className="hidden"
-      />
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -137,13 +123,19 @@ export function Dashboard({
           </div>
         </button>
 
-        {/* iCloud-Laden Button */}
-        <button
-          type="button"
-          onClick={handleTriggerLoad}
-          disabled={loadState === 'loading'}
-          className="w-full flex items-center justify-center rounded-2xl bg-gray-500 text-white px-4 py-4 shadow-lg shadow-gray-500/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
+        {/* iCloud-Laden Button (Native iOS Label) */}
+        <label
+          className={`w-full flex items-center justify-center rounded-2xl bg-gray-500 text-white px-4 py-4 shadow-lg shadow-gray-500/20 active:scale-[0.98] transition-transform cursor-pointer select-none ${
+            loadState === 'loading' ? 'opacity-50 pointer-events-none' : ''
+          }`}
         >
+          <input
+            type="file"
+            accept=".json,application/json"
+            onChange={handleFileChange}
+            className="sr-only"
+            disabled={loadState === 'loading'}
+          />
           <div className="flex items-center gap-2">
             {loadState === 'loading' ? (
               <Loader2 size={20} className="animate-spin shrink-0" />
@@ -164,7 +156,7 @@ export function Dashboard({
                 : 'iCloud-Laden'}
             </span>
           </div>
-        </button>
+        </label>
       </div>
 
       {!hasApiKey && safeHoldings.length > 0 && (
