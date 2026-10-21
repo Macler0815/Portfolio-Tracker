@@ -30,13 +30,24 @@ function openDB(): Promise<IDBDatabase> {
           db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
         }
       };
-      req.onsuccess = () => resolve(req.result);
+      const timer = setTimeout(() => {
+        dbPromise = null;
+        reject(new Error('IndexedDB open timed out'));
+      }, 3000);
+      req.onsuccess = () => {
+        clearTimeout(timer);
+        resolve(req.result);
+      };
       req.onerror = () => {
+        clearTimeout(timer);
         dbPromise = null;
         reject(req.error);
       };
       req.onblocked = () => {
+        clearTimeout(timer);
         console.warn('IndexedDB blocked by other tabs or processes');
+        dbPromise = null;
+        reject(new Error('IndexedDB blocked'));
       };
     } catch (err) {
       dbPromise = null;

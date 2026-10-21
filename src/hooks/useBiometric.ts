@@ -52,8 +52,9 @@ export function useBiometric() {
         }
 
         try {
-          const available =
-            await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          const checkPromise = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500));
+          const available = await Promise.race([checkPromise, timeoutPromise]).catch(() => false);
           if (!available) {
             if (!cancelled) setState('unsupported');
             return;
@@ -189,7 +190,10 @@ export function useBiometric() {
   useEffect(() => {
     function handleVisibility() {
       if (document.visibilityState === 'hidden' && stateRef.current === 'unlocked') {
-        setState('locked');
+        const isRegistered = !!localStorage.getItem(REGISTERED_KEY);
+        if (isRegistered) {
+          setState('locked');
+        }
       }
     }
     document.addEventListener('visibilitychange', handleVisibility);
