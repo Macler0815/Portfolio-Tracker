@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, Wallet, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
 import { formatCurrency, formatPercent, formatNumber, timeAgo } from '@/lib/format';
 
@@ -175,35 +175,37 @@ export function Dashboard({
         </div>
       )}
 
-      {/* Total Value Card (Ultra-Kompakt) */}
-<div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800 dark:from-gray-800 dark:to-gray-900 p-3.5 text-white shadow-md">
-  {/* Zeile 1: Label mit Icon & Gesamtwert-Betrag */}
-  <div className="flex items-center justify-between">
-    <div className="flex items-center gap-1.5 text-gray-300">
-      <Wallet size={16} className="text-gray-400" />
+      {/* Total Value Card (Kompakt im Original-Stil) */}
+<div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800 dark:from-gray-800 dark:to-gray-900 p-4 text-white shadow-md">
+  
+  {/* Zeile 1: Label und Gesamtwert */}
+  <div className="flex items-center justify-between mb-2">
+    <div className="flex items-center gap-1.5 text-gray-400">
+      <Wallet size={16} />
       <span className="text-sm font-medium">Gesamtwert</span>
     </div>
     <p className="text-2xl font-bold tracking-tight">{formatCurrency(safeSummary.totalValue)}</p>
   </div>
 
-  {/* Zeile 2: P/L & Sekundärinfos */}
-  <div className="mt-2 flex items-center justify-between pt-2 border-t border-white/10 text-xs">
-    {/* Gewinn / Verlust */}
-    <div className="flex items-center gap-1">
-      {plPositive ? <TrendingUp size={14} className="text-green-400" /> : <TrendingDown size={14} className="text-red-400" />}
-      <span className={`font-semibold ${plPositive ? 'text-green-400' : 'text-red-400'}`}>
-        {formatCurrency(Math.abs(safeSummary.totalPL))}
-      </span>
-      <span className={plPositive ? 'text-green-400' : 'text-red-400'}>
-        ({formatPercent(safeSummary.totalPLPercent)})
-      </span>
-    </div>
+  {/* Zeile 2: Performance (Gewinn/Verlust) */}
+  <div className="flex items-center gap-1.5 mb-3">
+    {plPositive ? <TrendingUp size={16} className="text-green-400" /> : <TrendingDown size={16} className="text-red-400" />}
+    <span className={`text-sm font-semibold ${plPositive ? 'text-green-400' : 'text-red-400'}`}>
+      {formatCurrency(Math.abs(safeSummary.totalPL))}
+    </span>
+    <span className={`text-xs ${plPositive ? 'text-green-400' : 'text-red-400'}`}>
+      ({formatPercent(safeSummary.totalPLPercent)})
+    </span>
+  </div>
 
-    {/* Investiert & Positionen */}
-    <div className="flex items-center gap-2 text-gray-400">
-      <span>Inv: <strong className="text-white font-medium">{formatCurrency(safeSummary.totalInvested)}</strong></span>
-      <span>•</span>
-      <span>Pos: <strong className="text-white font-medium">{safeHoldings.length}</strong></span>
+  {/* Zeile 3: Investiert & Positionen (Kompakter Footer) */}
+  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/10 text-xs">
+    <div className="flex items-center gap-1.5 text-gray-400">
+      <PiggyBank size={14} />
+      <span>Investiert: <strong className="text-white font-medium">{formatCurrency(safeSummary.totalInvested)}</strong></span>
+    </div>
+    <div className="text-right text-gray-400">
+      <span>Positionen: <strong className="text-white font-medium">{safeHoldings.length}</strong></span>
     </div>
   </div>
 </div>
