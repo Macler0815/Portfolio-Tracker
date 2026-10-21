@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
 import { formatCurrency, formatPercent, formatNumber, timeAgo } from '@/lib/format';
 
@@ -226,6 +226,14 @@ export function Dashboard({
                 : '—';
               const symbol = h.symbol || '—';
               const name = h.name || symbol;
+              const buyPrice = h.avgBuyPrice || 0;
+              const priceDiff = price > 0 && buyPrice > 0 ? price - buyPrice : 0;
+              const priceColorClass =
+                priceDiff > 0.0001
+                  ? 'text-green-600 dark:text-green-400 font-semibold'
+                  : priceDiff < -0.0001
+                  ? 'text-red-600 dark:text-red-400 font-semibold'
+                  : 'text-gray-500 dark:text-gray-400 font-medium';
 
               return (
                 <div key={h.symbol ? `${h.symbol}-${idx}` : `pos-${idx}`} className={`space-y-2 ${idx > 0 ? 'pt-3.5 mt-3.5' : ''}`}>
@@ -245,12 +253,12 @@ export function Dashboard({
                     <div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Kaufkurs</span>
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block mt-0.5">
-                        {formatCurrency(h.avgBuyPrice || 0)}
+                        {formatCurrency(buyPrice)}
                       </span>
                     </div>
                     <div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Aktuell</span>
-                      <span className="text-sm font-medium text-gray-900 dark:text-white block mt-0.5">
+                      <span className={`text-sm block mt-0.5 ${priceColorClass}`}>
                         {price > 0 ? formatCurrency(price) : '—'}
                       </span>
                     </div>

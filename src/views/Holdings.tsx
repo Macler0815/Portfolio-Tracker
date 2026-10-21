@@ -29,6 +29,16 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
       <div className="space-y-3">
         {holdings.map((h) => {
           const plPositive = h.pl >= 0;
+          const currentPrice = typeof h.currentPrice === 'number' && !isNaN(h.currentPrice) ? h.currentPrice : 0;
+          const buyPrice = typeof h.avgBuyPrice === 'number' && !isNaN(h.avgBuyPrice) ? h.avgBuyPrice : 0;
+          const priceDiff = currentPrice > 0 && buyPrice > 0 ? currentPrice - buyPrice : 0;
+          const priceColorClass =
+            priceDiff > 0.0001
+              ? 'text-green-600 dark:text-green-400 font-semibold'
+              : priceDiff < -0.0001
+              ? 'text-red-600 dark:text-red-400 font-semibold'
+              : 'text-gray-500 dark:text-gray-400 font-medium';
+
           return (
             <div key={h.symbol} className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4">
               <div className="flex items-start justify-between gap-3">
@@ -61,7 +71,7 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
                 </div>
                 <div>
                   <span className="text-gray-400 dark:text-gray-500 block">Aktuell</span>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">{formatCurrency(h.currentPrice)}</span>
+                  <span className={priceColorClass}>{formatCurrency(h.currentPrice)}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 dark:text-gray-500 block">Anteil</span>
