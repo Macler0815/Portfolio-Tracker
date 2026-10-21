@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Download, Upload, Trash2, ShieldAlert, CheckCircle2, Github, Cloud, CloudOff, RefreshCw, FolderOpen, Loader2, Key, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Download, Trash2, ShieldAlert, CheckCircle2, Github, Cloud, CloudOff, RefreshCw, FolderOpen, Loader2, Key, Save } from 'lucide-react';
 import type { PortfolioExport } from '@/lib/types';
 import { getApiKeyConfig, saveApiKeyConfig, clearApiKeyConfig, type ApiProvider } from '@/lib/api';
 import {
@@ -14,15 +14,14 @@ import {
 } from '@/lib/icloud';
 
 interface SettingsViewProps {
-  onExport: () => Promise<PortfolioExport>;
+  onExport?: () => Promise<PortfolioExport>;
   onImport: (data: PortfolioExport) => Promise<void>;
   onClear: () => Promise<void>;
   getExportData: () => Promise<PortfolioExport>;
   onApiKeyChanged?: () => void;
 }
 
-export function SettingsView({ onExport, onImport, onClear, getExportData, onApiKeyChanged }: SettingsViewProps) {
-  const fileRef = useRef<HTMLInputElement>(null);
+export function SettingsView({ onImport, onClear, getExportData, onApiKeyChanged }: SettingsViewProps) {
   const [status, setStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -174,48 +173,6 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
     setStatus({ type: 'success', msg: 'iCloud-Verbindung getrennt' });
   }
 
-  async function handleExport() {
-    try {
-      const data = await onExport();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'portfolio.json';
-      a.click();
-      URL.revokeObjectURL(url);
-      setStatus({ type: 'success', msg: 'Portfolio exportiert als portfolio.json' });
-    } catch {
-      setStatus({ type: 'error', msg: 'Export fehlgeschlagen' });
-    }
-  }
-
-  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await new Promise<string>((resolve, reject) => {
-        if (typeof file.text === 'function') {
-          file.text().then(resolve).catch(reject);
-        } else {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => reject(reader.error);
-          reader.readAsText(file);
-        }
-      });
-      const data = JSON.parse(text) as PortfolioExport;
-      if (!data || !Array.isArray(data.transactions)) {
-        throw new Error('Invalid format');
-      }
-      await onImport(data);
-      setStatus({ type: 'success', msg: 'Portfolio erfolgreich importiert' });
-    } catch {
-      setStatus({ type: 'error', msg: 'Import fehlgeschlagen — ungültige Datei' });
-    } finally {
-      if (fileRef.current) fileRef.current.value = '';
-    }
-  }
 
   async function handleClear() {
     try {
@@ -395,38 +352,6 @@ export function SettingsView({ onExport, onImport, onClear, getExportData, onApi
         </div>
       )}
 
-      {/* Manual Backup */}
-      <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Manuelles Backup</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Exportiere oder importiere deine Daten als JSON-Datei.
-          </p>
-        </div>
-        <div className="divide-y divide-gray-100 dark:divide-gray-800">
-          <button
-            onClick={handleExport}
-            className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-gray-50 dark:active:bg-gray-800 transition-colors"
-          >
-            <Download size={20} className="text-gray-500 dark:text-gray-400" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Portfolio exportieren</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Als portfolio.json herunterladen</p>
-            </div>
-          </button>
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-gray-50 dark:active:bg-gray-800 transition-colors"
-          >
-            <Upload size={20} className="text-gray-500 dark:text-gray-400" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Portfolio importieren</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">portfolio.json hochladen und ersetzen</p>
-            </div>
-          </button>
-          <input ref={fileRef} type="file" accept="application/json,.json" onChange={handleImport} className="hidden" />
-        </div>
-      </div>
 
       {/* Data Management */}
       <div className="mt-4 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
