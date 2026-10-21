@@ -25,7 +25,12 @@ export function formatDate(iso: string): string {
 }
 
 export function formatNumber(value: number, decimals = 2): string {
-  return new Intl.NumberFormat('de-DE', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(value);
+  const safeVal = typeof value === 'number' && !isNaN(value) ? value : 0;
+  try {
+    return new Intl.NumberFormat('de-DE', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(safeVal);
+  } catch {
+    return safeVal.toFixed(decimals).replace('.', ',');
+  }
 }
 
 export function todayISO(): string {

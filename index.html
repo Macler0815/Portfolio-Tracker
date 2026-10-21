@@ -23,46 +23,46 @@
   <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased selection:bg-green-500/20">
     <div id="root"></div>
     <script>
-      // Global error catcher for iPhone/mobile debugging (prevents silent white screen)
-      window.addEventListener('error', function (e) {
-        if (!document.getElementById('root')?.hasChildNodes()) {
-          var el = document.getElementById('debug-error');
-          if (!el) {
-            el = document.createElement('div');
-            el.id = 'debug-error';
-            el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#030712;color:#f87171;padding:24px;font-family:system-ui,monospace;font-size:13px;z-index:999999;overflow:auto;line-height:1.5;';
-            el.innerHTML = '<h2 style="color:#fff;font-size:16px;margin:0 0 12px;font-weight:bold;">Startfehler auf dem Gerät:</h2>';
-            document.body.appendChild(el);
+      // 1. Explicitly unregister any active service worker to prevent stale module caching on mobile devices
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (registrations) {
+          for (var reg of registrations) {
+            reg.unregister();
           }
-          el.innerHTML += '<div style="background:#1f2937;padding:12px;border-radius:12px;margin-bottom:12px;word-break:break-all;">' +
-            '<p style="color:#ef4444;font-weight:bold;margin:0 0 4px;">' + (e.message || 'Unbekannter Fehler') + '</p>' +
-            '<p style="color:#9ca3af;font-size:11px;margin:0;">' + (e.filename || '') + ':' + (e.lineno || '') + '</p>' +
-            '</div>' +
-            '<button onclick="location.reload(true)" style="background:#16a34a;color:#fff;border:none;padding:10px 18px;border-radius:10px;font-weight:bold;cursor:pointer;">Neu laden</button>';
-        }
-      });
-
-      // Clear any outdated caches from previous versions
+        });
+      }
+      // 2. Clear all browser cache storage
       if ('caches' in window) {
         caches.keys().then(function (keys) {
-          keys.forEach(function (k) {
-            if (k !== 'portfolio-tracker-v19') {
-              caches.delete(k);
-            }
-          });
+          for (var k of keys) {
+            caches.delete(k);
+          }
         });
       }
 
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-          navigator.serviceWorker
-            .register('./sw.js')
-            .then(function (reg) {
-              reg.update().catch(function () {});
-            })
-            .catch(function () {});
-        });
+      // 3. Catch all startup errors and unhandled promise rejections on iOS
+      function showStartError(title, err) {
+        var el = document.getElementById('debug-error');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'debug-error';
+          el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#030712;color:#f87171;padding:24px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;z-index:999999;overflow:auto;line-height:1.5;box-sizing:border-box;';
+          document.body.appendChild(el);
+        }
+        var msg = typeof err === 'string' ? err : (err && (err.message || err.stack)) || 'Unbekannter Fehler';
+        el.innerHTML = '<h2 style="color:#fff;font-size:16px;margin:0 0 12px;font-weight:bold;">' + title + '</h2>' +
+          '<div style="background:#1f2937;padding:12px;border-radius:12px;margin-bottom:12px;word-break:break-all;">' +
+          '<p style="color:#ef4444;font-weight:bold;margin:0 0 4px;">' + msg + '</p>' +
+          '</div>' +
+          '<button onclick="location.reload(true)" style="background:#16a34a;color:#fff;border:none;padding:10px 18px;border-radius:10px;font-weight:bold;cursor:pointer;">Neu laden</button>';
       }
+
+      window.addEventListener('error', function (e) {
+        showStartError('Skript-Fehler aufgetreten:', (e.message || String(e)) + ' (' + (e.filename || '') + ':' + (e.lineno || '') + ')');
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        showStartError('Modul-Ladefehler (Promise Rejection):', e.reason);
+      });
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

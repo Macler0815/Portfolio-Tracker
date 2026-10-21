@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, Wallet, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info, ArrowUp, ArrowDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
 import { formatCurrency, formatPercent, formatNumber, timeAgo } from '@/lib/format';
 
@@ -226,7 +226,8 @@ export function Dashboard({
                 : '—';
               const symbol = h.symbol || '—';
               const name = h.name || symbol;
-              const buyPrice = h.avgBuyPrice || 0;
+              const rawBuyPrice = typeof h.avgBuyPrice === 'number' && !isNaN(h.avgBuyPrice) ? h.avgBuyPrice : parseFloat(String(h.avgBuyPrice || 0)) || 0;
+              const buyPrice = Math.max(0, rawBuyPrice);
               const priceDiff = price > 0 && buyPrice > 0 ? price - buyPrice : 0;
               const pctChange = buyPrice > 0 && price > 0 ? ((price - buyPrice) / buyPrice) * 100 : 0;
               const priceColorClass =
@@ -268,13 +269,13 @@ export function Dashboard({
                       <div className="mt-0.5">
                         {pctChange > 0.001 ? (
                           <span className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-green-600 dark:text-green-400 truncate">
-                            <ArrowUp size={12} className="shrink-0" />
-                            {formatNumber(Math.abs(pctChange), 2)}%
+                            <span className="font-bold">↑</span>
+                            <span>{formatNumber(Math.abs(pctChange), 2)}%</span>
                           </span>
                         ) : pctChange < -0.001 ? (
                           <span className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 truncate">
-                            <ArrowDown size={12} className="shrink-0" />
-                            {formatNumber(Math.abs(pctChange), 2)}%
+                            <span className="font-bold">↓</span>
+                            <span>{formatNumber(Math.abs(pctChange), 2)}%</span>
                           </span>
                         ) : (
                           <span className="text-xs sm:text-sm font-medium text-gray-400 dark:text-gray-500 block truncate">
