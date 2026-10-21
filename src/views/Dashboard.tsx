@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, Wallet, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info, ArrowUp, ArrowDown } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
 import { formatCurrency, formatPercent, formatNumber, timeAgo } from '@/lib/format';
 
@@ -228,6 +228,7 @@ export function Dashboard({
               const name = h.name || symbol;
               const buyPrice = h.avgBuyPrice || 0;
               const priceDiff = price > 0 && buyPrice > 0 ? price - buyPrice : 0;
+              const pctChange = buyPrice > 0 && price > 0 ? ((price - buyPrice) / buyPrice) * 100 : 0;
               const priceColorClass =
                 priceDiff > 0.0001
                   ? 'text-green-600 dark:text-green-400 font-semibold'
@@ -243,28 +244,48 @@ export function Dashboard({
                   </p>
 
                   {/* 2. THE NUMERIC FINANCIAL GRID (Bottom Line) */}
-                  <div className="grid grid-cols-4 gap-2 text-left">
+                  <div className="grid grid-cols-5 gap-1.5 sm:gap-2 text-left">
                     <div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Menge</span>
-                      <span className="text-sm font-medium text-gray-900 dark:text-white block mt-0.5">
+                      <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white block mt-0.5 truncate">
                         {formatNumber(quantity, 0)} Stk.
                       </span>
                     </div>
                     <div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Kaufkurs</span>
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block mt-0.5">
+                      <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 block mt-0.5 truncate">
                         {formatCurrency(buyPrice)}
                       </span>
                     </div>
                     <div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Aktuell</span>
-                      <span className={`text-sm block mt-0.5 ${priceColorClass}`}>
+                      <span className={`text-xs sm:text-sm block mt-0.5 truncate ${priceColorClass}`}>
                         {price > 0 ? formatCurrency(price) : '—'}
                       </span>
                     </div>
+                    <div>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 block">+-%</span>
+                      <div className="mt-0.5">
+                        {pctChange > 0.001 ? (
+                          <span className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-green-600 dark:text-green-400 truncate">
+                            <ArrowUp size={12} className="shrink-0" />
+                            {formatNumber(Math.abs(pctChange), 2)}%
+                          </span>
+                        ) : pctChange < -0.001 ? (
+                          <span className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 truncate">
+                            <ArrowDown size={12} className="shrink-0" />
+                            {formatNumber(Math.abs(pctChange), 2)}%
+                          </span>
+                        ) : (
+                          <span className="text-xs sm:text-sm font-medium text-gray-400 dark:text-gray-500 block truncate">
+                            0,00%
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     <div className="text-right">
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Gesamtwert</span>
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white block mt-0.5">
+                      <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white block mt-0.5 truncate">
                         {totalValue}
                       </span>
                     </div>
