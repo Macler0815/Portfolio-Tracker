@@ -1,61 +1,37 @@
-const CACHE_NAME = 'portfolio-tracker-v18';
-
-// Service Worker lifecycle & cache logger
-function logSW(action, ...args) {
-  console.log(`%c[SW ${new Date().toLocaleTimeString()}]%c ${action}`, 'color: #10b981; font-weight: bold;', 'color: inherit;', ...args);
-}
+const CACHE_NAME = 'portfolio-tracker-v19';
 
 self.addEventListener('install', () => {
-  logSW('Install event triggered. Calling skipWaiting().');
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  logSW(`Activate event triggered. Active cache version: ${CACHE_NAME}`);
   event.waitUntil(
     caches.keys().then((keys) => {
-      const oldKeys = keys.filter((k) => k !== CACHE_NAME);
-      if (oldKeys.length > 0) {
-        logSW(`Cleaning up obsolete caches: ${oldKeys.join(', ')}`);
-      }
-      return Promise.all(
-        oldKeys.map((k) => {
-          logSW(`Deleting old cache: ${k}`);
-          return caches.delete(k);
-        })
-      );
-    }).then(() => {
-      logSW('All obsolete caches cleared. Claiming clients.');
-      return self.clients.claim();
-    })
+      return Promise.all(keys.map((k) => caches.delete(k)));
+    }).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
 
-  // ALL requests on same origin: NETWORK-FIRST, cache fallback
-  // This completely eliminates stale/broken JS asset locks on iOS/iPhones
+  const url = new URL(request.url);
+  // Never intercept or cache Vite development modules, source files, or Vite internal requests
+  if (
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname.startsWith('/_aistudio') ||
+    url.pathname.startsWith('/__') ||
+    url.search.includes('t=') ||
+    url.search.includes('v=')
+  ) {
+    return;
+  }
+
+  // Pass through to network
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      })
-      .catch(async (err) => {
-        logSW(`Network failed for ${url.pathname}, falling back to cache...`, err);
-        const cached = await caches.match(request);
-        if (cached) return cached;
-        if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
-          return (await caches.match('./index.html')) || (await caches.match('/index.html'));
-        }
-        throw err;
-      })
+    fetch(request).catch(() => caches.match(request))
   );
 });

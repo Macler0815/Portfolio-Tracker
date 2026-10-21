@@ -32,7 +32,4 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(BUILD_TIME),
     __BUILD_NUMBER__: JSON.stringify(buildNumber),
   },
-  optimizeDeps: {
-    exclude: ['lucide-react'],
-  },
 });
