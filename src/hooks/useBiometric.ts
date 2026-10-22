@@ -35,7 +35,7 @@ function randomChallenge(): ArrayBuffer {
 }
 
 export function useBiometric() {
-  const [state, setState] = useState<BiometricState>('unlocked');
+  const [state, setState] = useState<BiometricState>('checking');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const stateRef = useRef(state);
@@ -46,6 +46,26 @@ export function useBiometric() {
 
     async function init() {
       try {
+        if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+          if (!cancelled) setState('unsupported');
+          return;
+        }
+
+        try {
+          const checkPromise = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500));
+          const available = await Promise.race([checkPromise, timeoutPromise]).catch(() => false);
+          if (!available) {
+            if (!cancelled) setState('unsupported');
+            return;
+          }
+        } catch {
+          if (!cancelled) {
+            setState('unsupported');
+            return;
+          }
+        }
+
         let registered: string | null = null;
         try {
           registered = localStorage.getItem(REGISTERED_KEY);
@@ -53,19 +73,12 @@ export function useBiometric() {
           // localStorage disabled or restricted in private browsing
         }
 
-        // If the user has not registered biometrics, stay completely unlocked (no blocking screen)
-        if (!registered) {
-          if (!cancelled) setState('unlocked');
-          return;
-        }
-
-        // If registered, lock the app until authenticated
         if (!cancelled) {
-          setState('locked');
+          setState(registered ? 'locked' : 'unregistered');
         }
       } catch (err) {
         console.warn('Biometric init exception:', err);
-        if (!cancelled) setState('unlocked');
+        if (!cancelled) setState('unsupported');
       }
     }
 
