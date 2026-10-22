@@ -279,7 +279,7 @@ export function Dashboard({
                           </span>
                         ) : (
                           <span className="text-xs sm:text-sm font-medium text-gray-400 dark:text-gray-500 block truncate">
-                            0,00%
+                            0,00
                           </span>
                         )}
                       </div>
