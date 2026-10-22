@@ -265,25 +265,28 @@ export function Dashboard({
                       </span>
                     </div>
                     <div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">+-%</span>
-                      <div className="mt-0.5">
-                        {pctChange > 0.001 ? (
-                          <span className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-green-600 dark:text-green-400 truncate">
-                            <span className="font-bold">↑</span>
-                            <span>{formatNumber(Math.abs(pctChange), 2)}</span>
-                          </span>
-                        ) : pctChange < -0.001 ? (
-                          <span className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 truncate">
-                            <span className="font-bold">↓</span>
-                            <span>{formatNumber(Math.abs(pctChange), 2)}</span>
-                          </span>
-                        ) : (
-                          <span className="text-xs sm:text-sm font-medium text-gray-400 dark:text-gray-500 block truncate">
-                            0,00
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                      <div>
+  <span className="text-xs text-gray-500 dark:text-gray-400 block">+-%</span>
+  {/* Das umgebende Div steuert jetzt die Ausrichtung und Höhe identisch zu den anderen Spalten */}
+  <div className="text-xs sm:text-sm mt-0.5 h-5 flex items-baseline truncate">
+    {pctChange > 0.001 ? (
+      <span className="flex items-baseline gap-0.5 font-semibold text-green-600 dark:text-green-400">
+        <span className="text-[10px] sm:text-xs font-bold self-center">↑</span>
+        <span>{formatNumber(Math.abs(pctChange), 2)}</span>
+      </span>
+    ) : pctChange < -0.001 ? (
+      <span className="flex items-baseline gap-0.5 font-semibold text-red-600 dark:text-red-400">
+        <span className="text-[10px] sm:text-xs font-bold self-center">↓</span>
+        <span>{formatNumber(Math.abs(pctChange), 2)}</span>
+      </span>
+    ) : (
+      <span className="font-medium text-gray-400 dark:text-gray-500">
+        0,00
+      </span>
+    )}
+  </div>
+</div>
+
                     <div className="text-right">
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Gesamtwert</span>
                       <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white block mt-0.5 truncate">
