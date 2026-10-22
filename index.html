@@ -21,19 +21,74 @@
     <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
 
     <script>
-      // Service Worker registration for PWA
+      // 1. Proactively clear service workers and caches on mobile
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-          navigator.serviceWorker
-            .register('./sw.js')
-            .then(function (reg) {
-              reg.update().catch(function () {});
-            })
-            .catch(function (err) {
-              console.warn('SW registration failed:', err);
-            });
+        navigator.serviceWorker.getRegistrations().then(function (registrations) {
+          for (var reg of registrations) {
+            reg.unregister();
+          }
         });
       }
+      if ('caches' in window) {
+        caches.keys().then(function (keys) {
+          for (var k of keys) {
+            caches.delete(k);
+          }
+        });
+      }
+
+      window.resetAndReload = function () {
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+          if ('caches' in window) {
+            caches.keys().then(function (keys) {
+              keys.forEach(function (k) { caches.delete(k); });
+            });
+          }
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              regs.forEach(function (r) { r.unregister(); });
+            });
+          }
+        } catch (e) {}
+        window.location.reload(true);
+      };
+
+      // 2. Catch all startup errors and unhandled promise rejections on iOS
+      function showStartError(title, err) {
+        var el = document.getElementById('debug-error');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'debug-error';
+          el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#030712;color:#f87171;padding:24px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;z-index:999999;overflow:auto;line-height:1.5;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;';
+          document.body.appendChild(el);
+        }
+        var msg = typeof err === 'string' ? err : (err && (err.message || err.stack)) || 'Unbekannter Fehler';
+        el.innerHTML = '<div style="max-width:340px;width:100%;background:#111827;border:1px solid #374151;border-radius:18px;padding:20px;box-shadow:0 10px 25px rgba(0,0,0,0.5);">' +
+          '<h2 style="color:#fff;font-size:16px;margin:0 0 10px;font-weight:bold;">' + title + '</h2>' +
+          '<p style="color:#ef4444;font-size:12px;margin:0 0 16px;word-break:break-all;">' + msg + '</p>' +
+          '<button onclick="window.resetAndReload()" style="width:100%;background:#16a34a;color:#fff;border:none;padding:12px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">Cache leeren & neu laden</button>' +
+          '</div>';
+      }
+
+      window.addEventListener('error', function (e) {
+        showStartError('Ladefehler aufgetreten', (e.message || String(e)));
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        showStartError('Modulfehler (Promise)', e.reason);
+      });
+
+      // 3. Fallback Watchdog: If nothing mounts after 4.5 seconds, display reset UI
+      setTimeout(function () {
+        var root = document.getElementById('root');
+        if (root && !root.hasChildNodes()) {
+          showStartError(
+            'Ladevorgang dauert ungewöhnlich lange',
+            'Der Browser hat das Hauptmodul noch nicht gerendert. Tippe auf "Cache leeren & neu laden", um die App frisch zu starten.'
+          );
+        }
+      }, 4500);
     </script>
   </head>
   <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased selection:bg-green-500/20">
