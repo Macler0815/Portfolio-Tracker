@@ -270,16 +270,16 @@ export function Dashboard({
                         {pctChange > 0.001 ? (
                           <span className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-green-600 dark:text-green-400 truncate">
                             <span className="font-bold">↑</span>
-                            <span>{formatNumber(Math.abs(pctChange), 2)}%</span>
+                            <span>{formatNumber(Math.abs(pctChange), 2)}</span>
                           </span>
                         ) : pctChange < -0.001 ? (
                           <span className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 truncate">
                             <span className="font-bold">↓</span>
-                            <span>{formatNumber(Math.abs(pctChange), 2)}%</span>
+                            <span>{formatNumber(Math.abs(pctChange), 2)}</span>
                           </span>
                         ) : (
                           <span className="text-xs sm:text-sm font-medium text-gray-400 dark:text-gray-500 block truncate">
-                            0,00%
+                            0,00
                           </span>
                         )}
                       </div>
