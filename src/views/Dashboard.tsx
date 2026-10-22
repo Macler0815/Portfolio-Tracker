@@ -222,7 +222,7 @@ export function Dashboard({
                 ? h.price
                 : 0;
               const totalValue = (quantity > 0 && price > 0)
-                ? (quantity * price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
+                ? formatCurrency(quantity * price)
                 : '—';
               const symbol = h.symbol || '—';
               const name = h.name || symbol;

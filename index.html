@@ -74,21 +74,10 @@
 
       window.addEventListener('error', function (e) {
         showStartError('Ladefehler aufgetreten', (e.message || String(e)));
-      });
+      }, true);
       window.addEventListener('unhandledrejection', function (e) {
         showStartError('Modulfehler (Promise)', e.reason);
       });
-
-      // 3. Fallback Watchdog: If nothing mounts after 4.5 seconds, display reset UI
-      setTimeout(function () {
-        var root = document.getElementById('root');
-        if (root && !root.hasChildNodes()) {
-          showStartError(
-            'Ladevorgang dauert ungewöhnlich lange',
-            'Der Browser hat das Hauptmodul noch nicht gerendert. Tippe auf "Cache leeren & neu laden", um die App frisch zu starten.'
-          );
-        }
-      }, 4500);
     </script>
   </head>
   <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased selection:bg-green-500/20">
