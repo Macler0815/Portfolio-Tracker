@@ -59,6 +59,7 @@ export interface Holding {
   allocation: number;
   priceSource: 'live' | 'manual' | 'missing';
   currency: string;
+  dailyChangePercent?: number;
 }
 
 export interface PortfolioExport {

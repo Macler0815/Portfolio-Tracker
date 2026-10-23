@@ -81,17 +81,17 @@ export async function deleteTransaction(id: string): Promise<void> {
   await tx(TX_STORE, 'readwrite', (s) => s.delete(id));
 }
 
-export async function putPriceQuote(q: { symbol: string; price: number; fetchedAt: number }): Promise<void> {
+export async function putPriceQuote(q: { symbol: string; price: number; fetchedAt: number; changePercent?: number }): Promise<void> {
   await tx(PRICE_STORE, 'readwrite', (s) => s.put(q));
 }
 
-export async function getPriceQuote(symbol: string): Promise<{ symbol: string; price: number; fetchedAt: number } | null> {
-  return tx<{ symbol: string; price: number; fetchedAt: number } | undefined>(PRICE_STORE, 'readonly', (s) => s.get(symbol)).then((r) => r ?? null);
+export async function getPriceQuote(symbol: string): Promise<{ symbol: string; price: number; fetchedAt: number; changePercent?: number } | null> {
+  return tx<{ symbol: string; price: number; fetchedAt: number; changePercent?: number } | undefined>(PRICE_STORE, 'readonly', (s) => s.get(symbol)).then((r) => r ?? null);
 }
 
-export async function getAllPriceQuotes(): Promise<Map<string, { price: number; fetchedAt: number }>> {
-  const all = await tx<{ symbol: string; price: number; fetchedAt: number }[]>(PRICE_STORE, 'readonly', (s) => s.getAll());
-  return new Map(all.map((q) => [q.symbol, { price: q.price, fetchedAt: q.fetchedAt }]));
+export async function getAllPriceQuotes(): Promise<Map<string, { price: number; fetchedAt: number; changePercent?: number }>> {
+  const all = await tx<{ symbol: string; price: number; fetchedAt: number; changePercent?: number }[]>(PRICE_STORE, 'readonly', (s) => s.getAll());
+  return new Map(all.map((q) => [q.symbol, { price: q.price, fetchedAt: q.fetchedAt, changePercent: q.changePercent }]));
 }
 
 export async function putManualPrice(p: { symbol: string; price: number; setAt: number }): Promise<void> {

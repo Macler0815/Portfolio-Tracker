@@ -23,7 +23,7 @@ function safeRandomId(): string {
 
 export function usePortfolio() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [prices, setPrices] = useState<Map<string, { price: number; fetchedAt: number }>>(new Map());
+  const [prices, setPrices] = useState<Map<string, { price: number; fetchedAt: number; changePercent?: number }>>(new Map());
   const [manualPrices, setManualPrices] = useState<Map<string, { price: number; setAt: number }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -117,8 +117,8 @@ export function usePortfolio() {
         let updatedCount = 0;
         if (quotes && typeof quotes[Symbol.iterator] === 'function') {
           for (const [symbol, q] of quotes) {
-            newPrices.set(symbol, { price: q.price, fetchedAt: Date.now() });
-            await putPriceQuote({ symbol, price: q.price, fetchedAt: Date.now() }).catch(() => {});
+            newPrices.set(symbol, { price: q.price, fetchedAt: Date.now(), changePercent: q.changePercent });
+            await putPriceQuote({ symbol, price: q.price, fetchedAt: Date.now(), changePercent: q.changePercent }).catch(() => {});
             updatedCount++;
           }
         }

@@ -1,6 +1,6 @@
 import type { Transaction, Holding, PortfolioSummary } from './types';
 
-export function computeHoldings(transactions: Transaction[], prices: Map<string, { price: number; fetchedAt: number }>, manualPrices: Map<string, { price: number; setAt: number }>): Holding[] {
+export function computeHoldings(transactions: Transaction[], prices: Map<string, { price: number; fetchedAt: number; changePercent?: number }>, manualPrices: Map<string, { price: number; setAt: number }>): Holding[] {
   const map = new Map<string, Holding>();
 
   // Chronologisch aufsteigend sortieren (älteste Transaktionen zuerst),
@@ -84,6 +84,7 @@ export function computeHoldings(transactions: Transaction[], prices: Map<string,
     } else if (live) {
       h.currentPrice = live.price;
       h.priceSource = 'live';
+      h.dailyChangePercent = live.changePercent;
     } else {
       h.currentPrice = h.avgBuyPrice;
       h.priceSource = 'missing';
