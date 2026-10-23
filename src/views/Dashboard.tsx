@@ -241,17 +241,11 @@ export function Dashboard({
                 <div key={h.symbol ? `${h.symbol}-${idx}` : `pos-${idx}`} className={`space-y-2 ${idx > 0 ? 'pt-3.5 mt-3.5' : ''}`}>
                   {/* 1. THE ASSET BLOCK (Top Line) */}
                   <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                    {symbol} · {name}
+                    {formatNumber(quantity, 0)} Stk. · {symbol} · {name}
                   </p>
 
                   {/* 2. THE NUMERIC FINANCIAL GRID (Bottom Line) */}
-                  <div className="grid grid-cols-5 gap-1.5 sm:gap-2 text-left">
-                    <div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Menge</span>
-                      <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white block mt-0.5 truncate">
-                        {formatNumber(quantity, 0)} Stk.
-                      </span>
-                    </div>
+                  <div className="grid grid-cols-4 gap-2 text-left">
                     <div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 block">Kaufkurs</span>
                       <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 block mt-0.5 truncate">

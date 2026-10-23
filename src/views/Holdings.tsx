@@ -53,7 +53,7 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
                     )}
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    {h.symbol} · {formatNumber(h.quantity, 4)} Stück
+                    {formatNumber(h.quantity, 4)} Stk. · {h.symbol}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
@@ -64,18 +64,18 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
                 </div>
               </div>
 
-              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 grid grid-cols-3 gap-2 text-xs">
+              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 grid grid-cols-3 gap-3 text-xs">
                 <div>
                   <span className="text-gray-400 dark:text-gray-500 block">Ø Kaufkurs</span>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">{formatCurrency(h.avgBuyPrice)}</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-300 block mt-0.5">{formatCurrency(h.avgBuyPrice)}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 dark:text-gray-500 block">Aktuell</span>
-                  <span className={priceColorClass}>{formatCurrency(h.currentPrice)}</span>
+                  <span className={`block mt-0.5 ${priceColorClass}`}>{formatCurrency(h.currentPrice)}</span>
                 </div>
-                <div>
+                <div className="text-right">
                   <span className="text-gray-400 dark:text-gray-500 block">Anteil</span>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">{h.allocation.toFixed(1)}%</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-300 block mt-0.5">{h.allocation.toFixed(1)}%</span>
                 </div>
               </div>
 
