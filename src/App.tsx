@@ -119,80 +119,77 @@ function App() {
     try {
       const data: PortfolioExport = await portfolio.exportPortfolio();
       const jsonString = JSON.stringify(data, null, 2);
-      const fileName = 'portfolio.json';
 
-      // 1. Create an actual File object from the portfolio JSON data with the exact filename portfolio.json
-      let file: File | null = null;
-      try {
-        file = new File([jsonString], fileName, { type: 'application/json' });
-      } catch {
-        file = null;
-      }
+      // 1. iOS Detection (including iPadOS with desktop user agent)
+      const isIOS = typeof navigator !== 'undefined' && (
+        /iPad|iPhone|iPod/.test(navigator.userAgent || '') || 
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+      );
 
-      // 2. Check if navigator.canShare and navigator.share are available for files (crucial for iOS Safari)
-      let canShareFiles = false;
-      if (file && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      // 2. Preserve iOS Logic (Strict): run existing iOS saving/export code EXACTLY as written
+      if (isIOS) {
+        const fileName = 'portfolio.json';
+
+        let file: File | null = null;
         try {
-          canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+          file = new File([jsonString], fileName, { type: 'application/json' });
         } catch {
-          canShareFiles = false;
+          file = null;
         }
+
+        let canShareFiles = false;
+        if (file && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+          try {
+            canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+          } catch {
+            canShareFiles = false;
+          }
+        }
+
+        if (file && canShareFiles) {
+          try {
+            await navigator.share({
+              files: [file],
+            });
+            setSyncStep('done');
+            setTimeout(() => setSyncStep('idle'), 2500);
+            return;
+          } catch {
+            setSyncStep('idle');
+            return;
+          }
+        }
+
+        if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+          try {
+            await navigator.share({
+              title: fileName,
+              text: jsonString,
+            });
+            setSyncStep('done');
+            setTimeout(() => setSyncStep('idle'), 2500);
+            return;
+          } catch {
+            setSyncStep('idle');
+            return;
+          }
+        }
+
+        setSyncStep('idle');
+        return;
       }
 
-      const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent || '');
-
-      // 3. If available, trigger the native system share dialog so that the user can choose 'Save to Files' to store it in iCloud Drive
-      if (file && canShareFiles) {
+      // 3. macOS / Desktop Flow: Check if window.showSaveFilePicker is supported
+      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window && window.showSaveFilePicker) {
         try {
-          await navigator.share({
-            files: [file],
-          });
-          setSyncStep('done');
-          setTimeout(() => setSyncStep('idle'), 2500);
-          return;
-        } catch {
-          // On iOS, whether aborted or error, never fall through to <a> blob click which replaces the webview with a whitescreen
-          setSyncStep('idle');
-          return;
-        }
-      }
-
-      // If on iOS and canShareFiles is not available, try navigator.share with title/text if supported
-      if (isIOS && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-        try {
-          await navigator.share({
-            title: fileName,
-            text: jsonString,
-          });
-          setSyncStep('done');
-          setTimeout(() => setSyncStep('idle'), 2500);
-          return;
-        } catch {
-          setSyncStep('idle');
-          return;
-        }
-      }
-
-      // Desktop File System Access API (if available on desktop Chrome/Edge)
-      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-        try {
-          const pickerWindow = window as unknown as {
-            showSaveFilePicker: (options?: {
-              suggestedName?: string;
-              types?: Array<{ description: string; accept: Record<string, string[]> }>;
-            }) => Promise<{
-              createWritable: () => Promise<{
-                write: (content: string) => Promise<void>;
-                close: () => Promise<void>;
-              }>;
-            }>;
-          };
-          const handle = await pickerWindow.showSaveFilePicker({
-            suggestedName: fileName,
-            types: [{
-              description: 'JSON File',
-              accept: { 'application/json': ['.json'] },
-            }],
+          const handle = await window.showSaveFilePicker({
+            suggestedName: `portfolio-backup-${new Date().toISOString().slice(0, 10)}.json`,
+            types: [
+              {
+                description: 'JSON File',
+                accept: { 'application/json': ['.json'] },
+              },
+            ],
           });
           const writable = await handle.createWritable();
           await writable.write(jsonString);
@@ -201,6 +198,7 @@ function App() {
           setTimeout(() => setSyncStep('idle'), 2500);
           return;
         } catch (err: unknown) {
+          // If the user cancels the native picker (AbortError), handle it gracefully
           if ((err as Error)?.name === 'AbortError') {
             setSyncStep('idle');
             return;
@@ -208,19 +206,17 @@ function App() {
         }
       }
 
-      // 4. Fallback for Desktop/Android browsers: Traditional Blob download via hidden <a> tag
-      if (!isIOS) {
-        const blob = new Blob([jsonString], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 2500);
-      }
+      // 4. Fallback desktop download mechanism if showSaveFilePicker is not available
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `portfolio-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2500);
 
       setSyncStep('done');
       setTimeout(() => setSyncStep('idle'), 2500);
