@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { TrendingUp, TrendingDown, Wallet, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info } from 'lucide-react';
 import type { PortfolioSummary, Holding } from '@/lib/types';
 import { formatCurrency, formatPercent, formatNumber, timeAgo } from '@/lib/format';
+import { HoldingEditModal } from '@/components/HoldingEditModal';
 
 interface DashboardProps {
   summary: PortfolioSummary;
@@ -17,6 +18,8 @@ interface DashboardProps {
   syncing: boolean;
   syncDone: boolean;
   hasApiKey: boolean;
+  onUpdateHolding?: (oldSymbol: string, updated: { symbol: string; name: string; quantity: number; avgBuyPrice: number }) => Promise<void> | void;
+  onDeleteHolding?: (symbol: string) => Promise<void> | void;
 }
 
 export type PositionSortKey = 'marketValue' | 'dailyChangePercent' | 'plPercent' | 'currentPrice' | 'avgBuyPrice';
@@ -33,6 +36,8 @@ export function Dashboard({
   syncing,
   syncDone,
   hasApiKey,
+  onUpdateHolding,
+  onDeleteHolding,
 }: DashboardProps) {
   const safeSummary = summary || {
     totalValue: 0,
@@ -47,6 +52,21 @@ export function Dashboard({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<PositionSortKey>('marketValue');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
+
+  const handleUpdateHolding = async (oldSymbol: string, updated: { symbol: string; name: string; quantity: number; avgBuyPrice: number }) => {
+    if (onUpdateHolding) {
+      await onUpdateHolding(oldSymbol, updated);
+    }
+    setEditingHolding(null);
+  };
+
+  const handleDeleteHolding = async (symbol: string) => {
+    if (onDeleteHolding) {
+      await onDeleteHolding(symbol);
+    }
+    setEditingHolding(null);
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -301,7 +321,11 @@ export function Dashboard({
                   : 'text-gray-500 dark:text-gray-400 font-medium';
 
               return (
-                <div key={h.symbol ? `${h.symbol}-${idx}` : `pos-${idx}`} className={`space-y-2 ${idx > 0 ? 'pt-3.5 mt-3.5' : ''}`}>
+                <div
+                  key={h.symbol ? `${h.symbol}-${idx}` : `pos-${idx}`}
+                  onClick={() => setEditingHolding(h)}
+                  className={`space-y-2 cursor-pointer hover:border-gray-300 dark:hover:border-gray-700 transition-colors p-2.5 -mx-2.5 rounded-xl hover:bg-gray-50/70 dark:hover:bg-gray-800/40 active:scale-[0.99] ${idx > 0 ? 'pt-3.5 mt-3.5 border-t border-gray-100 dark:border-gray-800' : ''}`}
+                >
                   {/* 1. THE ASSET BLOCK (Top Line) */}
                   <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                     {formatNumber(quantity, 0)} Stk. · {symbol} · {name}
@@ -392,6 +416,15 @@ export function Dashboard({
           <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Tippe auf das + um deine erste Transaktion hinzuzufügen</p>
         </div>
       )}
+
+      {/* Edit Holding Modal */}
+      <HoldingEditModal
+        open={!!editingHolding}
+        holding={editingHolding}
+        onClose={() => setEditingHolding(null)}
+        onSave={handleUpdateHolding}
+        onDelete={onDeleteHolding ? handleDeleteHolding : undefined}
+      />
     </div>
   );
 }

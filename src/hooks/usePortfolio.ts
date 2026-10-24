@@ -201,6 +201,66 @@ export function usePortfolio() {
     });
   }, []);
 
+  // Holding update & delete
+  const updateHolding = useCallback(async (oldSymbol: string, updated: { symbol: string; name: string; quantity: number; avgBuyPrice: number }) => {
+    const cleanOldSymbol = oldSymbol.toUpperCase().trim();
+    const cleanNewSymbol = (updated.symbol || oldSymbol).toUpperCase().trim();
+    const matching = transactions.filter((t) => t?.symbol?.toUpperCase().trim() === cleanOldSymbol);
+
+    for (const t of matching) {
+      await deleteTransaction(t.id);
+    }
+
+    const earliestDate = matching.map((t) => t.date).filter(Boolean).sort()[0] || new Date().toISOString().slice(0, 10);
+    const assetType = matching[0]?.assetType || 'stock';
+    const ticker = matching[0]?.ticker || matching[0]?.yahooTicker;
+
+    const newTx: Transaction = {
+      id: safeRandomId(),
+      symbol: cleanNewSymbol,
+      name: updated.name || cleanNewSymbol,
+      type: 'buy',
+      assetType,
+      quantity: updated.quantity,
+      price: updated.avgBuyPrice,
+      date: earliestDate,
+      ticker,
+    };
+    await putTransaction(newTx);
+
+    if (cleanOldSymbol !== cleanNewSymbol && manualPrices.has(cleanOldSymbol)) {
+      const oldManual = manualPrices.get(cleanOldSymbol)!;
+      await putManualPrice({ symbol: cleanNewSymbol, price: oldManual.price, setAt: oldManual.setAt });
+      await deleteManualPrice(cleanOldSymbol);
+      setManualPrices((prev) => {
+        const m = new Map(prev);
+        m.delete(cleanOldSymbol);
+        m.set(cleanNewSymbol, oldManual);
+        return m;
+      });
+    }
+
+    setTransactions((prev) => {
+      const remaining = prev.filter((t) => t?.symbol?.toUpperCase().trim() !== cleanOldSymbol);
+      return [newTx, ...remaining].sort((a, b) => ((b && b.date) || '').localeCompare((a && a.date) || ''));
+    });
+  }, [transactions, manualPrices]);
+
+  const removeHolding = useCallback(async (symbol: string) => {
+    const cleanSymbol = symbol.toUpperCase().trim();
+    const matching = transactions.filter((t) => t?.symbol?.toUpperCase().trim() === cleanSymbol);
+    for (const t of matching) {
+      await deleteTransaction(t.id);
+    }
+    await deleteManualPrice(cleanSymbol).catch(() => {});
+    setManualPrices((prev) => {
+      const m = new Map(prev);
+      m.delete(cleanSymbol);
+      return m;
+    });
+    setTransactions((prev) => prev.filter((t) => t?.symbol?.toUpperCase().trim() !== cleanSymbol));
+  }, [transactions]);
+
   // Export / Import
   const exportPortfolio = useCallback(async (): Promise<PortfolioExport> => {
     try {
@@ -266,6 +326,8 @@ export function usePortfolio() {
     addTransaction,
     updateTransaction,
     removeTransaction,
+    updateHolding,
+    removeHolding,
     setManualPrice,
     removeManualPrice,
     exportPortfolio,

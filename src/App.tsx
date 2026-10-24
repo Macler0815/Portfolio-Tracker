@@ -306,6 +306,8 @@ function App() {
           syncing={syncStep === 'saving'}
           syncDone={syncStep === 'done'}
           hasApiKey={hasApiKey}
+          onUpdateHolding={portfolio.updateHolding}
+          onDeleteHolding={portfolio.removeHolding}
         />
       )}
       {tab === 'holdings' && (
@@ -314,6 +316,8 @@ function App() {
           transactions={portfolio.transactions}
           currentPrices={currentPrices}
           onEditPrice={handleEditPrice}
+          onUpdateHolding={portfolio.updateHolding}
+          onDeleteHolding={portfolio.removeHolding}
         />
       )}
       {tab === 'transactions' && (

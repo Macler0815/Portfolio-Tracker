@@ -1,16 +1,35 @@
+import { useState } from 'react';
 import { AlertTriangle, Edit3 } from 'lucide-react';
 import type { Holding, Transaction } from '@/lib/types';
 import { formatCurrency, formatPercent, formatNumber } from '@/lib/format';
 import { PerformanceChart } from '@/components/PerformanceChart';
+import { HoldingEditModal } from '@/components/HoldingEditModal';
 
 interface HoldingsViewProps {
   holdings: Holding[];
   transactions: Transaction[];
   currentPrices: Map<string, number>;
   onEditPrice: (holding: Holding) => void;
+  onUpdateHolding?: (oldSymbol: string, updated: { symbol: string; name: string; quantity: number; avgBuyPrice: number }) => Promise<void> | void;
+  onDeleteHolding?: (symbol: string) => Promise<void> | void;
 }
 
-export function HoldingsView({ holdings, transactions, currentPrices, onEditPrice }: HoldingsViewProps) {
+export function HoldingsView({ holdings, transactions, currentPrices, onEditPrice, onUpdateHolding, onDeleteHolding }: HoldingsViewProps) {
+  const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
+
+  const handleUpdate = async (oldSymbol: string, updated: { symbol: string; name: string; quantity: number; avgBuyPrice: number }) => {
+    if (onUpdateHolding) {
+      await onUpdateHolding(oldSymbol, updated);
+    }
+    setEditingHolding(null);
+  };
+
+  const handleDelete = async (symbol: string) => {
+    if (onDeleteHolding) {
+      await onDeleteHolding(symbol);
+    }
+    setEditingHolding(null);
+  };
   if (holdings.length === 0) {
     return (
       <div className="px-4 pt-2 pb-24 max-w-2xl mx-auto">
@@ -40,7 +59,11 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
               : 'text-gray-500 dark:text-gray-400 font-medium';
 
           return (
-            <div key={h.symbol} className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4">
+            <div
+              key={h.symbol}
+              onClick={() => setEditingHolding(h)}
+              className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 cursor-pointer hover:border-gray-300 dark:hover:border-gray-700 transition-colors"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -81,7 +104,10 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
 
               {h.priceSource === 'missing' && (
                 <button
-                  onClick={() => onEditPrice(h)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditPrice(h);
+                  }}
                   className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 active:scale-[0.98] transition-transform"
                 >
                   <Edit3 size={14} />
@@ -90,7 +116,10 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
               )}
               {h.priceSource === 'manual' && (
                 <button
-                  onClick={() => onEditPrice(h)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditPrice(h);
+                  }}
                   className="mt-2 text-xs text-blue-600 dark:text-blue-400 font-medium"
                 >
                   Kurs bearbeiten
@@ -118,6 +147,15 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
           <PerformanceChart transactions={transactions} currentPrices={currentPrices} height={180} />
         </div>
       )}
+
+      {/* Holding Edit Modal */}
+      <HoldingEditModal
+        open={!!editingHolding}
+        holding={editingHolding}
+        onClose={() => setEditingHolding(null)}
+        onSave={handleUpdate}
+        onDelete={onDeleteHolding ? handleDelete : undefined}
+      />
     </div>
   );
 }
