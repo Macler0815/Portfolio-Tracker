@@ -19,6 +19,8 @@ interface DashboardProps {
   hasApiKey: boolean;
 }
 
+export type PositionSortKey = 'marketValue' | 'dailyChangePercent' | 'plPercent' | 'currentPrice' | 'avgBuyPrice';
+
 export function Dashboard({
   summary,
   holdings,
@@ -43,6 +45,8 @@ export function Dashboard({
   const plPositive = (safeSummary.totalPL || 0) >= 0;
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<PositionSortKey>('marketValue');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,6 +82,42 @@ export function Dashboard({
       e.target.value = '';
     }
   };
+
+  const sortedHoldings = [...safeHoldings].sort((a, b) => {
+    let valA = 0;
+    let valB = 0;
+
+    switch (sortBy) {
+      case 'marketValue':
+        valA = (a.quantity || 0) * (a.currentPrice || a.price || 0);
+        valB = (b.quantity || 0) * (b.currentPrice || b.price || 0);
+        break;
+      case 'dailyChangePercent':
+        valA = typeof a.dailyChangePercent === 'number' ? a.dailyChangePercent : 0;
+        valB = typeof b.dailyChangePercent === 'number' ? b.dailyChangePercent : 0;
+        break;
+      case 'plPercent': {
+        const buyA = a.avgBuyPrice || 0;
+        const priceA = a.currentPrice || a.price || 0;
+        valA = buyA > 0 ? ((priceA - buyA) / buyA) * 100 : 0;
+        
+        const buyB = b.avgBuyPrice || 0;
+        const priceB = b.currentPrice || b.price || 0;
+        valB = buyB > 0 ? ((priceB - buyB) / buyB) * 100 : 0;
+        break;
+      }
+      case 'currentPrice':
+        valA = a.currentPrice || a.price || 0;
+        valB = b.currentPrice || b.price || 0;
+        break;
+      case 'avgBuyPrice':
+        valA = a.avgBuyPrice || 0;
+        valB = b.avgBuyPrice || 0;
+        break;
+    }
+
+    return sortOrder === 'asc' ? valA - valB : valB - valA;
+  });
 
   return (
     <div className="px-4 pt-2 pb-24 space-y-5 max-w-2xl mx-auto">
@@ -211,9 +251,32 @@ export function Dashboard({
       {/* Alle Positionen */}
       {safeHoldings.length > 0 && (
         <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Alle Positionen</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Alle Positionen</h2>
+            <div className="flex items-center gap-2">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as PositionSortKey)}
+                className="text-xs bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="marketValue">Gesamtwert</option>
+                <option value="dailyChangePercent">Tages- %</option>
+                <option value="plPercent">+-%</option>
+                <option value="currentPrice">Aktuell</option>
+                <option value="avgBuyPrice">Kaufkurs</option>
+              </select>
+
+              <button
+                onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                className="p-1 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-xs font-semibold"
+                title={sortOrder === 'asc' ? 'Aufsteigend' : 'Absteigend'}
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+          </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {safeHoldings.map((h, idx) => {
+            {sortedHoldings.map((h, idx) => {
               if (!h) return null;
               const quantity = Math.round(h.quantity || 0);
               const price = typeof h.currentPrice === 'number' && !isNaN(h.currentPrice)
