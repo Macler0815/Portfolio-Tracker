@@ -179,39 +179,50 @@ function App() {
         return;
       }
 
-      // 3. macOS / Desktop Flow: Check if window.showSaveFilePicker is supported
-      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window && window.showSaveFilePicker) {
+      // 3. macOS / Desktop Flow (Web Share API with Fallback)
+      const fileName = `portfolio-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      let file: File | null = null;
+      try {
+        file = new File([jsonString], fileName, { type: 'application/json' });
+      } catch {
+        file = null;
+      }
+
+      if (file && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        let canShareFiles = false;
         try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: `portfolio-backup-${new Date().toISOString().slice(0, 10)}.json`,
-            types: [
-              {
-                description: 'JSON File',
-                accept: { 'application/json': ['.json'] },
-              },
-            ],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(jsonString);
-          await writable.close();
-          setSyncStep('done');
-          setTimeout(() => setSyncStep('idle'), 2500);
-          return;
-        } catch (err: unknown) {
-          // If the user cancels the native picker (AbortError), handle it gracefully
-          if ((err as Error)?.name === 'AbortError') {
-            setSyncStep('idle');
+          canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+        } catch {
+          canShareFiles = false;
+        }
+
+        if (canShareFiles) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: 'Portfolio Backup',
+              text: 'Here is your portfolio backup JSON file.',
+            });
+            setSyncStep('done');
+            setTimeout(() => setSyncStep('idle'), 2500);
             return;
+          } catch (err: unknown) {
+            if ((err as Error)?.name === 'AbortError') {
+              // User cancelled share dialog, exit gracefully
+              setSyncStep('idle');
+              return;
+            }
+            console.warn('Share failed, falling back to download:', err);
           }
         }
       }
 
-      // 4. Fallback desktop download mechanism if showSaveFilePicker is not available
+      // 4. Fallback: Standard Blob download method
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `portfolio-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = fileName;
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
