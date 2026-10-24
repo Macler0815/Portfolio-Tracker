@@ -308,64 +308,69 @@ export function Dashboard({
                   </p>
 
                   {/* 2. THE NUMERIC FINANCIAL GRID (Bottom Line) */}
-                  <div className="grid grid-cols-5 gap-1.5 sm:gap-2 text-left">
-                    <div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Kaufkurs</span>
+                  <div className="grid grid-cols-[1fr_1fr_0.85fr_0.85fr_1.3fr] gap-1 sm:gap-2 text-left items-center">
+                    {/* Kaufkurs */}
+                    <div className="min-w-0">
+                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 block truncate">Kaufkurs</span>
                       <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 block mt-0.5 truncate">
                         {formatCurrency(buyPrice)}
                       </span>
                     </div>
-                    <div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Aktuell</span>
+
+                    {/* Aktuell */}
+                    <div className="min-w-0">
+                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 block truncate">Aktuell</span>
                       <span className={`text-xs sm:text-sm block mt-0.5 truncate ${priceColorClass}`}>
                         {price > 0 ? formatCurrency(price) : '—'}
                       </span>
                     </div>
-                    <div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">+-%</span>
+
+                    {/* Total % (+-%) */}
+                    <div className="min-w-0">
+                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 block truncate">+-%</span>
                       <div className="text-xs sm:text-sm mt-0.5 h-5 flex items-baseline truncate">
                         {pctChange > 0.001 ? (
                           <span className="flex items-baseline gap-0.5 font-semibold text-green-600 dark:text-green-400">
-                            <span className="text-[10px] sm:text-xs font-bold self-center">↑</span>
+                            <span className="text-[9px] sm:text-xs font-bold self-center">↑</span>
                             <span>{formatNumber(Math.abs(pctChange), 2)}</span>
                           </span>
                         ) : pctChange < -0.001 ? (
                           <span className="flex items-baseline gap-0.5 font-semibold text-red-600 dark:text-red-400">
-                            <span className="text-[10px] sm:text-xs font-bold self-center">↓</span>
+                            <span className="text-[9px] sm:text-xs font-bold self-center">↓</span>
                             <span>{formatNumber(Math.abs(pctChange), 2)}</span>
                           </span>
                         ) : (
-                          <span className="font-medium text-gray-400 dark:text-gray-500">
-                            0,00
-                          </span>
+                          <span className="font-medium text-gray-400 dark:text-gray-500">0,00</span>
                         )}
                       </div>
                     </div>
-                    <div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Tages- %</span>
+
+                    {/* Daily % (Tages- %) */}
+                    <div className="min-w-0">
+                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 block truncate">Tages- %</span>
                       <div className="text-xs sm:text-sm mt-0.5 h-5 flex items-baseline truncate">
                         {(() => {
                           const dailyChangePct = typeof h.dailyChangePercent === 'number' ? h.dailyChangePercent : 0;
                           return dailyChangePct > 0.001 ? (
                             <span className="flex items-baseline gap-0.5 font-semibold text-green-600 dark:text-green-400">
-                              <span className="text-[10px] sm:text-xs font-bold self-center">↑</span>
+                              <span className="text-[9px] sm:text-xs font-bold self-center">↑</span>
                               <span>{formatNumber(Math.abs(dailyChangePct), 2)}</span>
                             </span>
                           ) : dailyChangePct < -0.001 ? (
                             <span className="flex items-baseline gap-0.5 font-semibold text-red-600 dark:text-red-400">
-                              <span className="text-[10px] sm:text-xs font-bold self-center">↓</span>
+                              <span className="text-[9px] sm:text-xs font-bold self-center">↓</span>
                               <span>{formatNumber(Math.abs(dailyChangePct), 2)}</span>
                             </span>
                           ) : (
-                            <span className="font-medium text-gray-400 dark:text-gray-500">
-                              —
-                            </span>
+                            <span className="font-medium text-gray-400 dark:text-gray-500">—</span>
                           );
                         })()}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Gesamtwert</span>
+
+                    {/* Gesamtwert */}
+                    <div className="min-w-0 text-right">
+                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 block truncate">Gesamtwert</span>
                       <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white block mt-0.5 truncate">
                         {totalValue}
                       </span>
