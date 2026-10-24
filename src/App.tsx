@@ -179,8 +179,38 @@ function App() {
         return;
       }
 
-      // 3. macOS / Desktop Flow (Web Share API with Fallback)
+      // 3. macOS / Desktop Flow: Try File System Access API first
       const fileName = `portfolio-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
+      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window && window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: fileName,
+            types: [
+              {
+                description: 'JSON Backup',
+                accept: { 'application/json': ['.json'] },
+              },
+            ],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(jsonString);
+          await writable.close();
+
+          setSyncStep('done');
+          setTimeout(() => setSyncStep('idle'), 2500);
+          return;
+        } catch (err: unknown) {
+          if ((err as Error)?.name === 'AbortError') {
+            // User cancelled save dialog gracefully
+            setSyncStep('idle');
+            return;
+          }
+          console.warn('showSaveFilePicker failed, trying fallback:', err);
+        }
+      }
+
+      // 3b. Secondary Try: Web Share API if supported
       let file: File | null = null;
       try {
         file = new File([jsonString], fileName, { type: 'application/json' });
@@ -208,11 +238,9 @@ function App() {
             return;
           } catch (err: unknown) {
             if ((err as Error)?.name === 'AbortError') {
-              // User cancelled share dialog, exit gracefully
               setSyncStep('idle');
               return;
             }
-            console.warn('Share failed, falling back to download:', err);
           }
         }
       }
