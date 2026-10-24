@@ -10,14 +10,32 @@ interface HoldingsViewProps {
   transactions: Transaction[];
   currentPrices: Map<string, number>;
   onEditPrice: (holding: Holding) => void;
-  onUpdateHolding?: (oldSymbol: string, updated: { symbol: string; name: string; quantity: number; avgBuyPrice: number }) => Promise<void> | void;
+  onUpdateHolding?: (oldSymbol: string, updated: {
+    symbol: string;
+    name: string;
+    quantity: number;
+    avgBuyPrice: number;
+    broker?: string;
+    isin?: string;
+    wkn?: string;
+    notes?: string;
+  }) => Promise<void> | void;
   onDeleteHolding?: (symbol: string) => Promise<void> | void;
 }
 
 export function HoldingsView({ holdings, transactions, currentPrices, onEditPrice, onUpdateHolding, onDeleteHolding }: HoldingsViewProps) {
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
 
-  const handleUpdate = async (oldSymbol: string, updated: { symbol: string; name: string; quantity: number; avgBuyPrice: number }) => {
+  const handleUpdate = async (oldSymbol: string, updated: {
+    symbol: string;
+    name: string;
+    quantity: number;
+    avgBuyPrice: number;
+    broker?: string;
+    isin?: string;
+    wkn?: string;
+    notes?: string;
+  }) => {
     if (onUpdateHolding) {
       await onUpdateHolding(oldSymbol, updated);
     }

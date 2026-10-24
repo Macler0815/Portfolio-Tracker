@@ -7,7 +7,16 @@ interface HoldingEditModalProps {
   open: boolean;
   holding: Holding | null;
   onClose: () => void;
-  onSave: (oldSymbol: string, updated: { symbol: string; name: string; quantity: number; avgBuyPrice: number }) => Promise<void> | void;
+  onSave: (oldSymbol: string, updated: {
+    symbol: string;
+    name: string;
+    quantity: number;
+    avgBuyPrice: number;
+    broker?: string;
+    isin?: string;
+    wkn?: string;
+    notes?: string;
+  }) => Promise<void> | void;
   onDelete?: (symbol: string) => Promise<void> | void;
 }
 
@@ -16,6 +25,10 @@ export function HoldingEditModal({ open, holding, onClose, onSave, onDelete }: H
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('');
   const [avgBuyPrice, setAvgBuyPrice] = useState('');
+  const [broker, setBroker] = useState('');
+  const [isin, setIsin] = useState('');
+  const [wkn, setWkn] = useState('');
+  const [notes, setNotes] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -25,6 +38,10 @@ export function HoldingEditModal({ open, holding, onClose, onSave, onDelete }: H
       setName(holding.name || '');
       setQuantity(String(holding.quantity || 0));
       setAvgBuyPrice(String(holding.avgBuyPrice || 0));
+      setBroker(holding.broker || holding.bank || '');
+      setIsin(holding.isin || '');
+      setWkn(holding.wkn || '');
+      setNotes(holding.notes || holding.note || '');
       setConfirmDelete(false);
       setSaving(false);
     }
@@ -46,6 +63,10 @@ export function HoldingEditModal({ open, holding, onClose, onSave, onDelete }: H
         name: name.trim() || symbol.trim().toUpperCase(),
         quantity: parsedQty,
         avgBuyPrice: parsedPrice,
+        broker: broker.trim() || undefined,
+        isin: isin.trim().toUpperCase() || undefined,
+        wkn: wkn.trim().toUpperCase() || undefined,
+        notes: notes.trim() || undefined,
       });
       onClose();
     } finally {
@@ -71,7 +92,7 @@ export function HoldingEditModal({ open, holding, onClose, onSave, onDelete }: H
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-xl p-6"
+        className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-xl p-5 sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -82,7 +103,7 @@ export function HoldingEditModal({ open, holding, onClose, onSave, onDelete }: H
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Position bearbeiten</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Stammdaten & Kaufwerte anpassen</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Stammdaten, Broker & Details anpassen</p>
             </div>
           </div>
           <button
@@ -159,6 +180,54 @@ export function HoldingEditModal({ open, holding, onClose, onSave, onDelete }: H
                 className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
+          </div>
+
+          {/* Broker */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bank / Broker</label>
+            <input
+              type="text"
+              value={broker}
+              onChange={(e) => setBroker(e.target.value)}
+              placeholder="z.B. Trade Republic"
+              className="w-full text-xs sm:text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* ISIN & WKN */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">ISIN</label>
+              <input
+                type="text"
+                value={isin}
+                onChange={(e) => setIsin(e.target.value.toUpperCase())}
+                placeholder="US0378331005"
+                className="w-full text-xs sm:text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">WKN</label>
+              <input
+                type="text"
+                value={wkn}
+                onChange={(e) => setWkn(e.target.value.toUpperCase())}
+                placeholder="865985"
+                className="w-full text-xs sm:text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase"
+              />
+            </div>
+          </div>
+
+          {/* Notizen */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notizen (optional)</label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Persönliche Notizen zur Position..."
+              className="w-full text-xs sm:text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+            />
           </div>
 
           {/* Buttons */}

@@ -13,10 +13,13 @@ export interface Transaction {
   date: string;
   fee?: number;
   bank?: string;
+  broker?: string;
   note?: string;
+  notes?: string;
   ticker?: string;
   yahooTicker?: string;
   isin?: string;
+  wkn?: string;
 }
 
 export interface PriceQuote {
@@ -60,6 +63,12 @@ export interface Holding {
   priceSource: 'live' | 'manual' | 'missing';
   currency: string;
   dailyChangePercent?: number;
+  broker?: string;
+  bank?: string;
+  isin?: string;
+  wkn?: string;
+  notes?: string;
+  note?: string;
 }
 
 export interface PortfolioExport {

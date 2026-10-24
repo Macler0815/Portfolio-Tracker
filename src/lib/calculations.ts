@@ -55,6 +55,16 @@ export function computeHoldings(transactions: Transaction[], prices: Map<string,
       h.fees += fee;
       if (t.name) h.name = t.name;
       if (t.assetType) h.assetType = t.assetType;
+      if (t.broker || t.bank) {
+        h.broker = t.broker || t.bank;
+        h.bank = h.broker;
+      }
+      if (t.isin) h.isin = t.isin;
+      if (t.wkn) h.wkn = t.wkn;
+      if (t.notes || t.note) {
+        h.notes = t.notes || t.note;
+        h.note = h.notes;
+      }
     } else {
       // 2. SELL: Stückzahl subtrahieren
       const sellQty = Math.min(qty, h.quantity);

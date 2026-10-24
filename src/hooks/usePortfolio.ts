@@ -202,7 +202,16 @@ export function usePortfolio() {
   }, []);
 
   // Holding update & delete
-  const updateHolding = useCallback(async (oldSymbol: string, updated: { symbol: string; name: string; quantity: number; avgBuyPrice: number }) => {
+  const updateHolding = useCallback(async (oldSymbol: string, updated: {
+    symbol: string;
+    name: string;
+    quantity: number;
+    avgBuyPrice: number;
+    broker?: string;
+    isin?: string;
+    wkn?: string;
+    notes?: string;
+  }) => {
     const cleanOldSymbol = oldSymbol.toUpperCase().trim();
     const cleanNewSymbol = (updated.symbol || oldSymbol).toUpperCase().trim();
     const matching = transactions.filter((t) => t?.symbol?.toUpperCase().trim() === cleanOldSymbol);
@@ -225,6 +234,12 @@ export function usePortfolio() {
       price: updated.avgBuyPrice,
       date: earliestDate,
       ticker,
+      broker: updated.broker,
+      bank: updated.broker,
+      isin: updated.isin,
+      wkn: updated.wkn,
+      notes: updated.notes,
+      note: updated.notes,
     };
     await putTransaction(newTx);
 
