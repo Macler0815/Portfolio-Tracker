@@ -21,9 +21,10 @@ interface HoldingsViewProps {
     notes?: string;
   }) => Promise<void> | void;
   onDeleteHolding?: (symbol: string) => Promise<void> | void;
+  onEditHolding?: (holding: Holding) => void;
 }
 
-export function HoldingsView({ holdings, transactions, currentPrices, onEditPrice, onUpdateHolding, onDeleteHolding }: HoldingsViewProps) {
+export function HoldingsView({ holdings, transactions, currentPrices, onEditPrice, onUpdateHolding, onDeleteHolding, onEditHolding }: HoldingsViewProps) {
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
 
   const handleUpdate = async (oldSymbol: string, updated: {
@@ -79,7 +80,7 @@ export function HoldingsView({ holdings, transactions, currentPrices, onEditPric
           return (
             <div
               key={h.symbol}
-              onClick={() => setEditingHolding(h)}
+              onClick={() => onEditHolding ? onEditHolding(h) : setEditingHolding(h)}
               className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 cursor-pointer hover:border-gray-300 dark:hover:border-gray-700 transition-colors"
             >
               <div className="flex items-start justify-between gap-3">

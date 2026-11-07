@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Search, X, Check, Loader2, Building2, TrendingUp, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
-import type { Transaction, TransactionType, AssetType } from '@/lib/types';
+import { Search, X, Check, Loader2, Building2, TrendingUp, Sparkles, CheckCircle2, AlertCircle, Bookmark } from 'lucide-react';
+import type { Transaction, TransactionType, AssetType, Holding } from '@/lib/types';
 import {
   searchSymbol,
   fetchSingleQuote,
@@ -10,20 +10,62 @@ import {
   type SearchResult,
 } from '@/lib/api';
 import { todayISO } from '@/lib/format';
+import { addToWatchlist } from '@/lib/watchlist';
 
 interface TransactionModalProps {
   open: boolean;
   editing: Transaction | null;
+  editingHolding?: Holding | null;
+  initialTab?: 'buy' | 'sell' | 'watchlist';
+  initialData?: {
+    symbol?: string;
+    name?: string;
+    price?: number;
+    isin?: string;
+    wkn?: string;
+    notes?: string;
+  } | null;
   onClose: () => void;
   onSave: (t: Omit<Transaction, 'id'> | Transaction) => void;
+  onSaveHolding?: (oldSymbol: string, updated: {
+    symbol: string;
+    name: string;
+    quantity: number;
+    avgBuyPrice: number;
+    broker?: string;
+    isin?: string;
+    wkn?: string;
+    notes?: string;
+  }) => Promise<void> | void;
+  onAddToWatchlist?: (item: {
+    symbol: string;
+    name: string;
+    isin?: string;
+    wkn?: string;
+    notes?: string;
+    lastPrice?: number;
+    lastChangePercent?: number;
+  }) => void;
   knownBanks: string[];
 }
 
-export function TransactionModal({ open, editing, onClose, onSave, knownBanks }: TransactionModalProps) {
+export function TransactionModal({
+  open,
+  editing,
+  editingHolding,
+  initialTab = 'buy',
+  initialData,
+  onClose,
+  onSave,
+  onSaveHolding,
+  onAddToWatchlist,
+  knownBanks,
+}: TransactionModalProps) {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
+  const [modalTab, setModalTab] = useState<'buy' | 'sell' | 'watchlist'>('buy');
   const [txType, setTxType] = useState<TransactionType>('buy');
   const [assetType, setAssetType] = useState<AssetType>('stock');
   const [quantity, setQuantity] = useState('');
@@ -44,51 +86,70 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   } | null>(null);
 
   const symbolInputRef = useRef<HTMLInputElement>(null);
-  const quantityInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!open) return;
 
-    if (editing) {
+    if (editingHolding) {
+      setModalTab('buy');
+      setTxType('buy');
+      setAssetType(editingHolding.assetType || 'stock');
+      setSymbol(editingHolding.symbol || '');
+      setName(editingHolding.name || '');
+      setIsin(editingHolding.isin || '');
+      setWkn(editingHolding.wkn || '');
+      setQuantity(String(editingHolding.quantity || ''));
+      setPrice(String(editingHolding.avgBuyPrice || ''));
+      setDate(todayISO());
+      setBank(editingHolding.broker || editingHolding.bank || '');
+      setNote(editingHolding.notes || editingHolding.note || '');
+      setPriceFetched(true);
+      setSearchResults([]);
+      setShowDropdown(false);
+      setSearching(false);
+      setLookupFeedback(null);
+    } else if (editing) {
+      setModalTab(editing.type === 'sell' ? 'sell' : 'buy');
       setTxType(editing.type);
       setAssetType(editing.assetType);
       setSymbol(editing.symbol);
       setName(editing.name);
       const rawIsin = editing.isin || '';
       const parts = rawIsin.split(' - ');
-      setIsin(parts[0] || '');
-      setWkn(parts[1] || '');
+      setIsin(parts[0] || editing.isin || '');
+      setWkn(parts[1] || editing.wkn || '');
       setQuantity(String(editing.quantity));
       setPrice(String(editing.price));
       setDate(editing.date);
-      setBank(editing.bank || '');
-      setNote(editing.note || '');
+      setBank(editing.broker || editing.bank || '');
+      setNote(editing.notes || editing.note || '');
       setPriceFetched(true);
       setSearchResults([]);
       setShowDropdown(false);
       setSearching(false);
       setLookupFeedback(null);
     } else {
-      setTxType('buy');
+      setModalTab(initialTab || 'buy');
+      setTxType(initialTab === 'sell' ? 'sell' : 'buy');
       setAssetType('stock');
-      setSymbol('');
-      setName('');
-      setIsin('');
-      setWkn('');
+      setSymbol(initialData?.symbol || '');
+      setName(initialData?.name || '');
+      setIsin(initialData?.isin || '');
+      setWkn(initialData?.wkn || '');
       setQuantity('');
-      setPrice('');
+      setPrice(initialData?.price ? String(initialData.price) : '');
       setDate(todayISO());
       setBank('');
-      setNote('');
-      setPriceFetched(false);
+      setNote(initialData?.notes || '');
+      setPriceFetched(Boolean(initialData?.price));
       setSearchResults([]);
       setShowDropdown(false);
       setSearching(false);
       setLookupFeedback(null);
     }
-  }, [open, editing]);
+  }, [open, editing, editingHolding, initialTab, initialData]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -160,11 +221,11 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
             });
             setLookupFeedback({
               type: 'success',
-              text: `Live-Kurs für ${trimmedUpper}: ${formatted} €`,
+              text: `Finnhub: ${trimmedUpper} · Live-Kurs: ${formatted} €`,
             });
           }
         } catch {
-          // If quote fetch fails, do not crash and leave price editable
+          // ignore background quote fetch error
         } finally {
           setPriceFetching(false);
         }
@@ -172,78 +233,50 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
     }, 300);
   }, []);
 
-  // Selecting a result from autocomplete dropdown (simplified, reliable, no fallback loops)
-  const selectResult = async (r: SearchResult) => {
-    const sym = r.symbol.toUpperCase();
-    const queryWas = symbol.trim().toUpperCase();
-
-    // 1. Populate Symbol, Name, AssetType
-    setSymbol(sym);
-    setName(r.name || sym);
-    setAssetType(r.type === 'etf' ? 'etf' : 'stock');
-
-    // Populate ISIN & WKN if search query was a valid 12-char ISIN (or sym is an ISIN)
-    const is12CharIsin = (val: string) => /^[A-Z]{2}[A-Z0-9]{10}$/.test(val);
-    if (is12CharIsin(queryWas)) {
-      setIsin(queryWas);
-      const derivedWkn = extractWknFromIsin(queryWas);
-      if (derivedWkn) setWkn(derivedWkn);
-    } else if (is12CharIsin(sym)) {
-      setIsin(sym);
-      const derivedWkn = extractWknFromIsin(sym);
-      if (derivedWkn) setWkn(derivedWkn);
-    }
-
-    // Close autocomplete dropdown and focus quantity
+  const handleSelectSearchResult = async (result: SearchResult) => {
+    setSymbol(result.symbol);
+    setName(result.name);
+    setAssetType(result.type === 'etf' ? 'etf' : 'stock');
     setShowDropdown(false);
     setSearchResults([]);
-    setTimeout(() => {
-      quantityInputRef.current?.focus();
-    }, 50);
 
-    // 2. Fetch live price for selected ticker without fallback loops
+    // Fetch live price for the selected symbol
     setPriceFetching(true);
+    setPriceFetched(false);
     setLookupFeedback(null);
 
     try {
-      const quote = await fetchSingleQuote(r.symbol);
-      const foundPrice = quote?.price && quote.price > 0 ? quote.price : null;
-
-      if (foundPrice && foundPrice > 0) {
-        setPrice(String(foundPrice));
+      const quote = await fetchSingleQuote(result.symbol);
+      if (quote && quote.price > 0) {
+        setPrice(quote.price.toString());
         setPriceFetched(true);
-        const formatted = foundPrice.toLocaleString('de-DE', {
+        const formatted = quote.price.toLocaleString('de-DE', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         });
         setLookupFeedback({
           type: 'success',
-          text: `Live-Kurs für ${r.symbol}: ${formatted} €`,
+          text: `Finnhub: ${result.name} · Live-Kurs: ${formatted} €`,
         });
       } else {
-        // If it returns 0 or no price, simply leave the price input field empty and unlocked
-        setPrice('');
-        setPriceFetched(false);
         setLookupFeedback({
           type: 'info',
-          text: `Kein Live-Kurs für ${r.symbol} gefunden. Kurs bitte manuell eingeben.`,
+          text: `${result.name} ausgewählt. Bitte Kurs manuell prüfen.`,
         });
       }
     } catch {
-      setPrice('');
-      setPriceFetched(false);
+      setLookupFeedback({
+        type: 'info',
+        text: `${result.name} ausgewählt. Kurs konnte nicht automatisch geladen werden.`,
+      });
     } finally {
       setPriceFetching(false);
     }
   };
 
-  const handleSelectSearchResult = selectResult;
-
-  // ISIN lookup
   const performIsinLookup = async (query: string, explicit = false) => {
-    if (!query || typeof query !== 'string') return;
     const clean = query.trim().toUpperCase();
-    if (!clean || clean.length < 5) return;
+    if (clean.length < 5) return;
 
     const immediateWkn = extractWknFromIsin(clean);
     if (immediateWkn) {
@@ -299,22 +332,82 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
   const handleIsinChange = (val: string) => {
     const clean = val.toUpperCase().trim();
     setIsin(clean);
-    const extracted = extractWknFromIsin(clean);
-    if (extracted && !wkn) {
-      setWkn(extracted);
+
+    const derivedWkn = extractWknFromIsin(clean);
+    if (derivedWkn && !wkn) {
+      setWkn(derivedWkn);
+    }
+
+    if (clean.length === 12) {
+      performIsinLookup(clean, false);
     }
   };
 
-  const handleSave = () => {
+  const handleWknChange = (val: string) => {
+    const clean = val.toUpperCase().trim();
+    setWkn(clean);
+    if (clean.length === 6) {
+      performIsinLookup(clean, false);
+    }
+  };
+
+  const handleSave = async () => {
+    const cleanSymbol = symbol.trim().toUpperCase();
+    if (!cleanSymbol) return;
+
+    // 1. WATCHLIST MODE
+    if (modalTab === 'watchlist') {
+      const watchItem = {
+        symbol: cleanSymbol,
+        name: name.trim() || cleanSymbol,
+        isin: isin.trim() || undefined,
+        wkn: wkn.trim() || undefined,
+        notes: note.trim() || undefined,
+        lastPrice: parseFloat(price) > 0 ? parseFloat(price) : undefined,
+      };
+
+      if (onAddToWatchlist) {
+        onAddToWatchlist(watchItem);
+      } else {
+        addToWatchlist(watchItem);
+      }
+
+      onClose();
+      return;
+    }
+
+    // 2. EDITING HOLDING MODE
+    if (editingHolding) {
+      const qty = parseFloat(quantity);
+      const prc = parseFloat(price);
+      if (isNaN(qty) || qty <= 0 || isNaN(prc) || prc < 0) return;
+
+      if (onSaveHolding) {
+        await onSaveHolding(editingHolding.symbol, {
+          symbol: cleanSymbol,
+          name: name.trim() || cleanSymbol,
+          quantity: qty,
+          avgBuyPrice: prc,
+          broker: bank.trim() || undefined,
+          isin: isin.trim() || undefined,
+          wkn: wkn.trim() || undefined,
+          notes: note.trim() || undefined,
+        });
+      }
+      onClose();
+      return;
+    }
+
+    // 3. TRANSACTION MODE (Buy/Sell)
     const qty = parseFloat(quantity);
     const prc = parseFloat(price);
-    if (!symbol || !qty || !prc || !date) return;
+    if (!cleanSymbol || !qty || !prc || !date) return;
 
     const combinedIsin = [isin.trim(), wkn.trim()].filter(Boolean).join(' - ');
 
-    const data = {
-      symbol: symbol.toUpperCase(),
-      name: name.trim() || symbol.toUpperCase(),
+    const data: Omit<Transaction, 'id'> = {
+      symbol: cleanSymbol,
+      name: name.trim() || cleanSymbol,
       type: txType,
       assetType,
       quantity: qty,
@@ -322,9 +415,12 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
       date,
       fee: 0,
       note: note.trim() || undefined,
+      notes: note.trim() || undefined,
       bank: bank.trim() || undefined,
-      ticker: symbol.toUpperCase(),
+      broker: bank.trim() || undefined,
+      ticker: cleanSymbol,
       isin: combinedIsin || undefined,
+      wkn: wkn.trim() || undefined,
     };
 
     if (editing) {
@@ -337,7 +433,12 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
 
   if (!open) return null;
 
-  const canSave = symbol.trim() && parseFloat(quantity) > 0 && parseFloat(price) > 0 && date;
+  const isWatchlist = modalTab === 'watchlist';
+  const isEditing = Boolean(editing || editingHolding);
+
+  const canSave = isWatchlist
+    ? symbol.trim().length > 0
+    : symbol.trim().length > 0 && parseFloat(quantity) > 0 && parseFloat(price) >= 0 && Boolean(date);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/40 backdrop-blur-sm" onClick={onClose}>
@@ -349,9 +450,22 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
         <div className="sticky top-0 bg-white dark:bg-gray-900 pt-3 pb-2 z-20 border-b border-gray-100 dark:border-gray-800">
           <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-700 mx-auto mb-2" />
           <div className="flex items-center justify-between px-5">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {editing ? 'Transaktion bearbeiten' : 'Neue Transaktion'}
-            </h2>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {editingHolding
+                  ? 'Position bearbeiten'
+                  : editing
+                  ? 'Transaktion bearbeiten'
+                  : isWatchlist
+                  ? 'Zur Watchlist hinzufügen'
+                  : 'Neue Transaktion'}
+              </h2>
+              {isWatchlist && (
+                <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                  Titel ohne Kauf zur Beobachtung vormerken
+                </p>
+              )}
+            </div>
             <button
               onClick={onClose}
               className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -364,38 +478,58 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
 
         {/* Form Content */}
         <div className="px-5 py-4 space-y-4">
-          {/* Buy/Sell toggle */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setTxType('buy')}
-              className={`flex-1 rounded-xl py-2.5 text-sm font-medium transition-all ${
-                txType === 'buy'
-                  ? 'bg-green-600 text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-              }`}
-            >
-              Kauf
-            </button>
-            <button
-              type="button"
-              onClick={() => setTxType('sell')}
-              className={`flex-1 rounded-xl py-2.5 text-sm font-medium transition-all ${
-                txType === 'sell'
-                  ? 'bg-red-600 text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-              }`}
-            >
-              Verkauf
-            </button>
-          </div>
+          {/* Compact Header Tabs: Kauf / Verkauf / Watchlist */}
+          {!isEditing && (
+            <div className="flex gap-1.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalTab('buy');
+                  setTxType('buy');
+                }}
+                className={`flex-1 rounded-lg py-1.5 px-2 text-xs font-semibold transition-all ${
+                  modalTab === 'buy'
+                    ? 'bg-green-600 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                Kauf
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalTab('sell');
+                  setTxType('sell');
+                }}
+                className={`flex-1 rounded-lg py-1.5 px-2 text-xs font-semibold transition-all ${
+                  modalTab === 'sell'
+                    ? 'bg-red-600 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                Verkauf
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('watchlist')}
+                className={`flex-1 rounded-lg py-1.5 px-2 text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                  modalTab === 'watchlist'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                <Bookmark size={12} />
+                <span>Watchlist</span>
+              </button>
+            </div>
+          )}
 
-          {/* Asset type toggle */}
+          {/* Asset type toggle (Aktie / ETF) */}
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setAssetType('stock')}
-              className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
+              className={`flex-1 rounded-xl py-1.5 text-xs font-medium transition-all ${
                 assetType === 'stock'
                   ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white font-semibold'
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
@@ -406,7 +540,7 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
             <button
               type="button"
               onClick={() => setAssetType('etf')}
-              className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
+              className={`flex-1 rounded-xl py-1.5 text-xs font-medium transition-all ${
                 assetType === 'etf'
                   ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white font-semibold'
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
@@ -449,83 +583,50 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
             {showDropdown && (searchResults.length > 0 || searching) && (
               <div
                 ref={dropdownRef}
-                className="absolute left-0 right-0 top-full mt-1.5 z-30 max-h-60 overflow-y-auto rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700"
+                className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-30 max-h-60 overflow-y-auto"
               >
-                {searchResults.map((r, idx) => (
+                {searching && searchResults.length === 0 && (
+                  <div className="p-4 text-center text-xs text-gray-500 dark:text-gray-400 flex items-center justify-center gap-2">
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Suche an Finnhub…</span>
+                  </div>
+                )}
+                {searchResults.map((r) => (
                   <button
-                    key={`${r.symbol}-${idx}`}
+                    key={`${r.symbol}-${r.exchange}`}
                     type="button"
                     onClick={() => handleSelectSearchResult(r)}
-                    className="w-full text-left p-3 hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors flex items-center justify-between"
+                    className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-750 border-b border-gray-100/60 dark:border-gray-700/60 last:border-b-0 transition-colors flex items-center justify-between"
                   >
-                    <div className="min-w-0 flex-1 pr-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-sm text-gray-900 dark:text-white">
+                    <div className="min-w-0 flex-1 mr-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-sm text-gray-900 dark:text-white">
                           {r.symbol}
                         </span>
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                          {r.type === 'etf' ? 'ETF' : 'Aktie'}
-                        </span>
                         {r.exchange && (
-                          <span className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                          <span className="text-[10px] uppercase px-1.5 py-0.2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded font-medium">
                             {r.exchange}
                           </span>
                         )}
+                        <span className="text-[10px] uppercase px-1.5 py-0.2 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded font-medium">
+                          {r.type.toUpperCase()}
+                        </span>
                       </div>
-                      <p className="text-xs text-gray-600 dark:text-gray-300 truncate mt-0.5">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                         {r.name}
                       </p>
                     </div>
-                    <span className="text-xs text-green-600 dark:text-green-400 font-medium shrink-0">
-                      Wählen →
-                    </span>
+                    <Sparkles size={14} className="text-green-600 dark:text-green-400 shrink-0" />
                   </button>
                 ))}
-                {searching && searchResults.length === 0 && (
-                  <div className="p-3 text-center text-xs text-gray-400 flex items-center justify-center gap-2">
-                    <Loader2 size={13} className="animate-spin" />
-                    <span>Suche läuft…</span>
-                  </div>
-                )}
               </div>
             )}
           </div>
 
-          {/* Feedback message banner */}
-          {lookupFeedback && (
-            <div
-              className={`flex items-start gap-2 p-2.5 rounded-xl text-xs transition-all ${
-                lookupFeedback.type === 'success'
-                  ? 'bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/60'
-                  : lookupFeedback.type === 'error'
-                  ? 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/60'
-                  : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60'
-              }`}
-            >
-              {lookupFeedback.type === 'success' && (
-                <CheckCircle2 size={15} className="shrink-0 mt-0.5 text-green-600 dark:text-green-400" />
-              )}
-              {lookupFeedback.type === 'error' && (
-                <AlertCircle size={15} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
-              )}
-              {lookupFeedback.type === 'info' && (
-                <AlertCircle size={15} className="shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
-              )}
-              <span className="flex-1">{lookupFeedback.text}</span>
-              <button
-                type="button"
-                onClick={() => setLookupFeedback(null)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
-              >
-                <X size={13} />
-              </button>
-            </div>
-          )}
-
-          {/* Name */}
+          {/* Name input */}
           <div>
             <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              Name (Wertpapiername)
+              Bezeichnung / Name
             </label>
             <input
               type="text"
@@ -536,140 +637,153 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
             />
           </div>
 
-          {/* ISIN & WKN */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block">
-                ISIN &amp; WKN
+          {/* ISIN & WKN Fields */}
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                ISIN
               </label>
-              <button
-                type="button"
-                onClick={() => performIsinLookup(isin || symbol, true)}
-                disabled={isinLookingUp || (!isin.trim() && !symbol.trim())}
-                className="flex items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {isinLookingUp ? (
-                  <>
-                    <Loader2 size={12} className="animate-spin" />
-                    <span>Lade…</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={12} />
-                    <span>Finnhub Live-Abfrage</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
               <div className="relative">
                 <input
                   type="text"
                   value={isin}
                   onChange={(e) => handleIsinChange(e.target.value)}
-                  placeholder="ISIN (z.B. US0378331005)"
+                  placeholder="US0378331005"
                   maxLength={12}
-                  className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono tracking-wider"
+                  className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono tracking-wider text-xs"
                 />
                 {isinLookingUp && (
-                  <Loader2 size={13} className="animate-spin text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  <Loader2 size={14} className="animate-spin text-green-600 absolute right-3 top-1/2 -translate-y-1/2" />
                 )}
               </div>
-              <span className="text-gray-400 dark:text-gray-500 text-sm font-medium">-</span>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                WKN
+              </label>
               <input
                 type="text"
                 value={wkn}
-                onChange={(e) => setWkn(e.target.value.toUpperCase().trim())}
-                placeholder="WKN (z.B. 865985)"
+                onChange={(e) => handleWknChange(e.target.value)}
+                placeholder="865985"
                 maxLength={6}
-                className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3 py-2.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono tracking-wider"
+                className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none uppercase font-mono tracking-wider text-xs"
               />
             </div>
           </div>
 
-          {/* Stückzahl & Kurs */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                Stückzahl <span className="text-red-500">*</span>
-              </label>
-              <input
-                ref={quantityInputRef}
-                type="number"
-                step="any"
-                inputMode="decimal"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder="10"
-                className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none font-mono"
-              />
+          {/* ISIN / Finnhub Lookup Feedback Banner */}
+          {lookupFeedback && (
+            <div
+              className={`rounded-xl p-3 flex items-start gap-2.5 text-xs transition-all ${
+                lookupFeedback.type === 'success'
+                  ? 'bg-green-50 dark:bg-green-950/40 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800/50'
+                  : lookupFeedback.type === 'error'
+                  ? 'bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800/50'
+                  : 'bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50'
+              }`}
+            >
+              {lookupFeedback.type === 'success' ? (
+                <CheckCircle2 size={16} className="text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+              ) : lookupFeedback.type === 'error' ? (
+                <AlertCircle size={16} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+              ) : (
+                <Sparkles size={16} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              )}
+              <span className="flex-1 font-medium">{lookupFeedback.text}</span>
             </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  Kurs / Preis in € <span className="text-red-500">*</span>
-                  {priceFetching && <Loader2 size={12} className="animate-spin text-gray-400" />}
-                </span>
-                {priceFetched && !priceFetching && price && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded-md">
-                    <TrendingUp size={10} />
-                    Live
-                  </span>
-                )}
-              </label>
-              <input
-                type="number"
-                step="any"
-                inputMode="decimal"
-                value={price}
-                onChange={(e) => {
-                  setPrice(e.target.value);
-                  setPriceFetched(true);
-                }}
-                placeholder={priceFetching ? 'Lade Kurs…' : '150.00'}
-                className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none font-mono"
-              />
-            </div>
-          </div>
+          )}
 
-          {/* Bank / Broker */}
-          <div>
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              Bank / Broker
-            </label>
-            <div className="relative">
-              <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={bank}
-                onChange={(e) => setBank(e.target.value)}
-                list="bank-list"
-                placeholder="z.B. Trade Republic, Scalable, ING"
-                className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 pl-10 pr-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
-              />
-              <datalist id="bank-list">
-                {knownBanks.map((b) => (
-                  <option key={b} value={b} />
-                ))}
-              </datalist>
-            </div>
-          </div>
+          {/* BUY/SELL ONLY FIELDS (Hidden in Watchlist mode) */}
+          {!isWatchlist && (
+            <>
+              {/* Quantity & Price */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                    {editingHolding ? 'Menge (Stück)' : txType === 'sell' ? 'Verkaufte Stück' : 'Stückzahl'}{' '}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    inputMode="decimal"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    placeholder="10"
+                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      {editingHolding ? 'Ø Kaufkurs (€)' : 'Kurs / Preis in €'}{' '}
+                      <span className="text-red-500">*</span>
+                      {priceFetching && <Loader2 size={12} className="animate-spin text-gray-400" />}
+                    </span>
+                    {priceFetched && !priceFetching && price && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded-md">
+                        <TrendingUp size={10} />
+                        Live
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    inputMode="decimal"
+                    value={price}
+                    onChange={(e) => {
+                      setPrice(e.target.value);
+                      setPriceFetched(true);
+                    }}
+                    placeholder={priceFetching ? 'Lade Kurs…' : '150.00'}
+                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none font-mono"
+                  />
+                </div>
+              </div>
 
-          {/* Date */}
-          <div>
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              Kaufdatum
-            </label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
-            />
-          </div>
+              {/* Bank / Broker */}
+              <div>
+                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                  Bank / Broker
+                </label>
+                <div className="relative">
+                  <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={bank}
+                    onChange={(e) => setBank(e.target.value)}
+                    list="bank-list"
+                    placeholder="z.B. Trade Republic, Scalable, ING"
+                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 pl-10 pr-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
+                  />
+                  <datalist id="bank-list">
+                    {knownBanks.map((b) => (
+                      <option key={b} value={b} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
 
-          {/* Notes */}
+              {/* Date */}
+              {!editingHolding && (
+                <div>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                    {txType === 'sell' ? 'Verkaufsdatum' : 'Kaufdatum'}
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
+                  />
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Notes (always available) */}
           <div>
             <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
               Notizen (optional)
@@ -677,17 +791,17 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Optionale Notizen zu dieser Transaktion"
+              placeholder={isWatchlist ? 'Warum beobachtest du diesen Titel? Kursziel etc.' : 'Optionale Notizen zu dieser Position'}
               rows={2}
               className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 border-0 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-green-500 outline-none resize-none"
             />
           </div>
 
-          {/* Total calculation preview */}
-          {parseFloat(quantity) > 0 && parseFloat(price) > 0 && (
+          {/* Total calculation preview (for buy/sell only) */}
+          {!isWatchlist && parseFloat(quantity) > 0 && parseFloat(price) > 0 && (
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3.5 flex items-center justify-between border border-gray-100 dark:border-gray-800">
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                Gesamtwert (Volumen)
+                {editingHolding ? 'Positionswert (Kaufsumme)' : 'Gesamtwert (Volumen)'}
               </span>
               <span className="text-base font-bold text-gray-900 dark:text-white">
                 {(parseFloat(quantity) * parseFloat(price)).toLocaleString('de-DE', {
@@ -698,15 +812,27 @@ export function TransactionModal({ open, editing, onClose, onSave, knownBanks }:
             </div>
           )}
 
-          {/* Save Button */}
+          {/* Save / Submit Button */}
           <button
             type="button"
             onClick={handleSave}
             disabled={!canSave}
-            className="w-full rounded-xl bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white py-3.5 text-sm font-semibold transition-all disabled:opacity-40 disabled:active:scale-100 shadow-sm flex items-center justify-center gap-2"
+            className={`w-full rounded-xl text-white py-3.5 text-sm font-semibold transition-all disabled:opacity-40 disabled:active:scale-100 shadow-sm flex items-center justify-center gap-2 ${
+              isWatchlist
+                ? 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98]'
+                : txType === 'sell' && !editingHolding
+                ? 'bg-red-600 hover:bg-red-700 active:scale-[0.98]'
+                : 'bg-green-600 hover:bg-green-700 active:scale-[0.98]'
+            }`}
           >
-            <Check size={18} />
-            <span>{editing ? 'Änderungen speichern' : 'Transaktion hinzufügen'}</span>
+            {isWatchlist ? <Bookmark size={18} /> : <Check size={18} />}
+            <span>
+              {isWatchlist
+                ? 'Zur Watchlist hinzufügen'
+                : isEditing
+                ? 'Änderungen speichern'
+                : 'Transaktion hinzufügen'}
+            </span>
           </button>
         </div>
       </div>

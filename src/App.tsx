@@ -18,6 +18,16 @@ function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
+  const [modalInitialTab, setModalInitialTab] = useState<'buy' | 'sell' | 'watchlist'>('buy');
+  const [modalInitialData, setModalInitialData] = useState<{
+    symbol?: string;
+    name?: string;
+    price?: number;
+    isin?: string;
+    wkn?: string;
+    notes?: string;
+  } | null>(null);
   const [priceModalOpen, setPriceModalOpen] = useState(false);
   const [priceHolding, setPriceHolding] = useState<Holding | null>(null);
   const [syncStep, setSyncStep] = useState<'idle' | 'saving' | 'done'>('idle');
@@ -70,7 +80,36 @@ function App() {
   ];
 
   function handleEditTransaction(t: Transaction) {
+    setEditingHolding(null);
     setEditingTx(t);
+    setModalInitialTab(t.type === 'sell' ? 'sell' : 'buy');
+    setModalInitialData(null);
+    setTxModalOpen(true);
+  }
+
+  function handleEditHolding(h: Holding) {
+    setEditingTx(null);
+    setEditingHolding(h);
+    setModalInitialTab('buy');
+    setModalInitialData(null);
+    setTxModalOpen(true);
+  }
+
+  function handleOpenTransactionModal(
+    tabMode?: 'buy' | 'sell' | 'watchlist',
+    data?: {
+      symbol?: string;
+      name?: string;
+      price?: number;
+      isin?: string;
+      wkn?: string;
+      notes?: string;
+    }
+  ) {
+    setEditingTx(null);
+    setEditingHolding(null);
+    setModalInitialTab(tabMode || 'buy');
+    setModalInitialData(data || null);
     setTxModalOpen(true);
   }
 
@@ -308,6 +347,8 @@ function App() {
           hasApiKey={hasApiKey}
           onUpdateHolding={portfolio.updateHolding}
           onDeleteHolding={portfolio.removeHolding}
+          onEditHolding={handleEditHolding}
+          onOpenTransactionModal={handleOpenTransactionModal}
         />
       )}
       {tab === 'holdings' && (
@@ -318,6 +359,7 @@ function App() {
           onEditPrice={handleEditPrice}
           onUpdateHolding={portfolio.updateHolding}
           onDeleteHolding={portfolio.removeHolding}
+          onEditHolding={handleEditHolding}
         />
       )}
       {tab === 'transactions' && (
@@ -339,10 +381,7 @@ function App() {
 
 
       <button
-        onClick={() => {
-          setEditingTx(null);
-          setTxModalOpen(true);
-        }}
+        onClick={() => handleOpenTransactionModal('buy')}
         className="fixed bottom-20 right-4 z-30 w-14 h-14 rounded-full bg-green-600 text-white shadow-lg shadow-green-600/30 flex items-center justify-center active:scale-90 transition-transform"
         aria-label="Transaktion hinzufügen"
       >
@@ -373,11 +412,18 @@ function App() {
       <TransactionModal
         open={txModalOpen}
         editing={editingTx}
+        editingHolding={editingHolding}
+        initialTab={modalInitialTab}
+        initialData={modalInitialData}
         onClose={() => {
           setTxModalOpen(false);
           setEditingTx(null);
+          setEditingHolding(null);
+          setModalInitialTab('buy');
+          setModalInitialData(null);
         }}
         onSave={handleSaveTransaction}
+        onSaveHolding={portfolio.updateHolding}
         knownBanks={knownBanks}
       />
       <PriceEditModal

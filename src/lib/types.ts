@@ -77,3 +77,14 @@ export interface PortfolioExport {
   transactions: Transaction[];
   manualPrices: ManualPrice[];
 }
+
+export interface WatchlistItem {
+  symbol: string;
+  name: string;
+  isin?: string;
+  wkn?: string;
+  notes?: string;
+  addedAt: number;
+  lastPrice?: number;
+  lastChangePercent?: number;
+}
