@@ -140,7 +140,14 @@ export function SettingsView({ onImport, onClear, getExportData, onApiKeyChanged
         return;
       }
       const data = (await readFromHandle(handle)) as PortfolioExport;
-      if (!data.version || !Array.isArray(data.transactions)) {
+      if (
+        !data ||
+        !data.version ||
+        (!Array.isArray(data.transactions) &&
+          !Array.isArray(data.holdings) &&
+          !Array.isArray(data.watchlist) &&
+          !data.portfolio_history)
+      ) {
         throw new Error('Invalid format');
       }
       await onImport(data);

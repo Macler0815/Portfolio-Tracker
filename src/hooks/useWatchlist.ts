@@ -79,17 +79,22 @@ export function useWatchlist() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length]);
 
-  const add = useCallback((item: {
+  const add = useCallback(async (item: {
     symbol: string;
     name?: string;
+    addedPrice?: number;
+    addedAt?: string;
     isin?: string;
     wkn?: string;
     notes?: string;
     lastPrice?: number;
     lastChangePercent?: number;
   }) => {
-    const updated = addToWatchlist(item);
-    setItems(updated);
+    const updated = await addToWatchlist(item);
+    if (mountedRef.current) {
+      setItems(updated);
+    }
+    return updated;
   }, []);
 
   const remove = useCallback((symbol: string) => {

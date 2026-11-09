@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { TrendingUp, TrendingDown, Wallet, RefreshCw, AlertCircle, CloudUpload, CloudDownload, CheckCircle2, Loader2, Info, Bookmark, Trash2, Plus } from 'lucide-react';
-import type { PortfolioSummary, Holding } from '@/lib/types';
+import type { PortfolioSummary, Holding, PortfolioExport } from '@/lib/types';
 import { formatCurrency, formatPercent, formatNumber, timeAgo } from '@/lib/format';
 import { HoldingEditModal } from '@/components/HoldingEditModal';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { getWatchlistItemAssetType, saveWatchlist } from '@/lib/watchlist';
+import { getPortfolioHistory, savePortfolioHistory } from '@/lib/history';
 
 interface DashboardProps {
   summary: PortfolioSummary;
@@ -14,8 +16,8 @@ interface DashboardProps {
   lastRefresh: number | null;
   error: string | null;
   onRefresh: () => void;
-  onICloudSync: () => void;
-  onICloudLoad?: (data: import('@/lib/types').PortfolioExport) => Promise<void> | void;
+  onICloudSync?: (exportData?: PortfolioExport) => void | Promise<void>;
+  onICloudLoad?: (data: PortfolioExport) => Promise<void> | void;
   syncing: boolean;
   syncDone: boolean;
   hasApiKey: boolean;
@@ -42,10 +44,13 @@ interface DashboardProps {
 }
 
 export type PositionSortKey = 'marketValue' | 'dailyChangePercent' | 'plPercent' | 'currentPrice' | 'avgBuyPrice';
+export type WatchlistSortKey = 'perfSinceAdded' | 'dailyChange' | 'name';
+export type WatchlistCategory = 'all' | 'stock' | 'etf';
 
 export function Dashboard({
   summary,
   holdings,
+  transactions,
   refreshing,
   lastRefresh,
   error,
@@ -75,6 +80,9 @@ export function Dashboard({
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
   const [sectionTab, setSectionTab] = useState<'positions' | 'watchlist'>('positions');
+  const [watchlistCategory, setWatchlistCategory] = useState<WatchlistCategory>('all');
+  const [watchlistSortBy, setWatchlistSortBy] = useState<WatchlistSortKey>('perfSinceAdded');
+  const [watchlistSortOrder, setWatchlistSortOrder] = useState<'asc' | 'desc'>('desc');
   const watchlist = useWatchlist();
 
   const handleUpdateHolding = async (oldSymbol: string, updated: {
@@ -100,6 +108,21 @@ export function Dashboard({
     setEditingHolding(null);
   };
 
+  const handleExportClick = () => {
+    const exportData: PortfolioExport = {
+      version: '1.1',
+      exportDate: new Date().toISOString(),
+      exportedAt: Date.now(),
+      holdings: safeHoldings,
+      watchlist: watchlist.items,
+      portfolio_history: getPortfolioHistory(),
+      transactions: transactions || [],
+    };
+    if (onICloudSync) {
+      onICloudSync(exportData);
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -116,12 +139,50 @@ export function Dashboard({
           reader.readAsText(file);
         }
       });
-      const data = JSON.parse(text);
-      if (!data || !Array.isArray(data.transactions)) {
+      const parsedData = JSON.parse(text);
+      if (
+        !parsedData ||
+        (!Array.isArray(parsedData.transactions) &&
+          !Array.isArray(parsedData.holdings) &&
+          !Array.isArray(parsedData.watchlist))
+      ) {
         throw new Error('Ungültiges Portfolio-Format');
       }
+
+      // 1. Restore Watchlist if present in backup (Requirement 2 & 3)
+      if (parsedData.watchlist && Array.isArray(parsedData.watchlist)) {
+        saveWatchlist(parsedData.watchlist);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('portfolio_watchlist', JSON.stringify(parsedData.watchlist));
+          } catch (storageErr) {
+            console.warn('Error saving imported watchlist to localStorage:', storageErr);
+          }
+        }
+      }
+
+      // 2. Restore Portfolio History if present in backup
+      if (
+        parsedData.portfolio_history &&
+        typeof parsedData.portfolio_history === 'object' &&
+        !Array.isArray(parsedData.portfolio_history)
+      ) {
+        savePortfolioHistory(parsedData.portfolio_history);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(
+              'portfolio_history',
+              JSON.stringify(parsedData.portfolio_history)
+            );
+          } catch (storageErr) {
+            console.warn('Error saving imported portfolio_history to localStorage:', storageErr);
+          }
+        }
+      }
+
+      // 3. Restore Holdings / Transactions
       if (onICloudLoad) {
-        await onICloudLoad(data);
+        await onICloudLoad(parsedData);
       }
       setLoadState('done');
       setTimeout(() => setLoadState('idle'), 3000);
@@ -171,6 +232,41 @@ export function Dashboard({
     return sortOrder === 'asc' ? valA - valB : valB - valA;
   });
 
+  const stockCount = watchlist.items.filter((item) => getWatchlistItemAssetType(item) === 'stock').length;
+  const etfCount = watchlist.items.filter((item) => getWatchlistItemAssetType(item) === 'etf').length;
+
+  const filteredWatchlist = watchlist.items.filter((item) => {
+    if (watchlistCategory === 'all') return true;
+    return getWatchlistItemAssetType(item) === watchlistCategory;
+  });
+
+  const sortedWatchlist = [...filteredWatchlist].sort((a, b) => {
+    const quoteA = watchlist.quotes.get(a.symbol) || watchlist.quotes.get(a.symbol.toUpperCase());
+    const priceA = quoteA && quoteA.price > 0 ? quoteA.price : (a.lastPrice || 0);
+    const addedA = a.addedPrice || 0;
+    const perfPctA = addedA > 0 && priceA > 0 ? ((priceA - addedA) / addedA) * 100 : (addedA === 0 && priceA > 0 ? 0 : -999999);
+    const dailyChangeA = quoteA && typeof quoteA.changePercent === 'number' ? quoteA.changePercent : (a.lastChangePercent || 0);
+
+    const quoteB = watchlist.quotes.get(b.symbol) || watchlist.quotes.get(b.symbol.toUpperCase());
+    const priceB = quoteB && quoteB.price > 0 ? quoteB.price : (b.lastPrice || 0);
+    const addedB = b.addedPrice || 0;
+    const perfPctB = addedB > 0 && priceB > 0 ? ((priceB - addedB) / addedB) * 100 : (addedB === 0 && priceB > 0 ? 0 : -999999);
+    const dailyChangeB = quoteB && typeof quoteB.changePercent === 'number' ? quoteB.changePercent : (b.lastChangePercent || 0);
+
+    let comparison = 0;
+    if (watchlistSortBy === 'perfSinceAdded') {
+      comparison = perfPctA - perfPctB;
+    } else if (watchlistSortBy === 'dailyChange') {
+      comparison = dailyChangeA - dailyChangeB;
+    } else if (watchlistSortBy === 'name') {
+      const nameA = a.name || a.symbol;
+      const nameB = b.name || b.symbol;
+      comparison = nameA.localeCompare(nameB, 'de', { sensitivity: 'base' });
+    }
+
+    return watchlistSortOrder === 'asc' ? comparison : -comparison;
+  });
+
   return (
     <div className="px-4 pt-2 pb-24 space-y-5 max-w-2xl mx-auto">
 
@@ -197,8 +293,8 @@ export function Dashboard({
         {/* iCloud-Speichern Button */}
         <button
           type="button"
-          onClick={onICloudSync}
-          disabled={syncing || safeHoldings.length === 0}
+          onClick={handleExportClick}
+          disabled={syncing || (safeHoldings.length === 0 && watchlist.items.length === 0)}
           className="w-full flex items-center justify-center rounded-2xl bg-green-600 text-white px-4 py-4 shadow-lg shadow-green-600/20 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
         >
           <div className="flex items-center gap-2">
@@ -357,7 +453,32 @@ export function Dashboard({
             )
           ) : (
             /* Watchlist Toolbar */
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              {watchlist.items.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={watchlistSortBy}
+                    onChange={(e) => setWatchlistSortBy(e.target.value as WatchlistSortKey)}
+                    className="text-xs bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    aria-label="Watchlist sortieren nach"
+                  >
+                    <option value="perfSinceAdded">Performance seit Einstieg</option>
+                    <option value="dailyChange">Tages-%</option>
+                    <option value="name">Name / Symbol</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => setWatchlistSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                    className="p-1 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-xs font-semibold"
+                    title={watchlistSortOrder === 'asc' ? 'Aufsteigend' : 'Absteigend'}
+                    aria-label={watchlistSortOrder === 'asc' ? 'Aufsteigend sortieren' : 'Absteigend sortieren'}
+                  >
+                    {watchlistSortOrder === 'asc' ? '↑' : '↓'}
+                  </button>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => watchlist.refreshQuotes()}
@@ -531,98 +652,235 @@ export function Dashboard({
         {sectionTab === 'watchlist' && (
           <>
             {watchlist.items.length > 0 ? (
-              <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {watchlist.items.map((item, idx) => {
-                  const quote = watchlist.quotes.get(item.symbol);
-                  const price = quote && quote.price > 0 ? quote.price : item.lastPrice || 0;
-                  const changePct = quote && typeof quote.changePercent === 'number' ? quote.changePercent : item.lastChangePercent || 0;
+              <div className="space-y-3">
+                {/* Kategorie-Filter (Alle | Aktien | ETFs) */}
+                <div className="flex items-center gap-1.5 pb-1 overflow-x-auto scrollbar-none">
+                  <button
+                    type="button"
+                    onClick={() => setWatchlistCategory('all')}
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all shrink-0 ${
+                      watchlistCategory === 'all'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Alle ({watchlist.items.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWatchlistCategory('stock')}
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all shrink-0 ${
+                      watchlistCategory === 'stock'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Aktien ({stockCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWatchlistCategory('etf')}
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all shrink-0 ${
+                      watchlistCategory === 'etf'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    ETFs ({etfCount})
+                  </button>
+                </div>
 
-                  return (
-                    <div
-                      key={`${item.symbol}-${idx}`}
-                      className={`p-2.5 -mx-2.5 rounded-xl hover:bg-gray-50/70 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-between gap-3 ${
-                        idx > 0 ? 'pt-3.5 mt-2 border-t border-gray-100 dark:border-gray-800' : ''
-                      }`}
-                    >
-                      {/* Linke Seite: Symbol & Name & Details */}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-sm text-gray-900 dark:text-white">
-                            {item.symbol}
-                          </span>
-                          {item.isin && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-mono">
-                              {item.isin}
-                            </span>
-                          )}
+                {sortedWatchlist.length > 0 ? (
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {sortedWatchlist.map((item, idx) => {
+                      const quote = watchlist.quotes.get(item.symbol) || watchlist.quotes.get(item.symbol.toUpperCase());
+                      const currentPrice = quote && quote.price > 0 ? quote.price : item.lastPrice || 0;
+                      const dailyChangePct =
+                        quote && typeof quote.changePercent === 'number'
+                          ? quote.changePercent
+                          : item.lastChangePercent || 0;
+
+                      const addedPrice = typeof item.addedPrice === 'number' && item.addedPrice > 0 ? item.addedPrice : 0;
+                      const hasAddedPrice = addedPrice > 0 && currentPrice > 0;
+                      const perfDiff = hasAddedPrice ? currentPrice - addedPrice : 0;
+                      const perfPct = hasAddedPrice ? ((currentPrice - addedPrice) / addedPrice) * 100 : 0;
+                      const assetType = getWatchlistItemAssetType(item);
+
+                      return (
+                        <div
+                          key={`${item.symbol}-${idx}`}
+                          className={`space-y-2 p-3 -mx-2.5 rounded-xl hover:bg-gray-50/70 dark:hover:bg-gray-800/40 transition-colors ${
+                            idx > 0 ? 'pt-3.5 mt-2 border-t border-gray-100 dark:border-gray-800' : ''
+                          }`}
+                        >
+                          {/* Zeile 1: Ticker, Name, Badges & Aktionen (Kaufen, Löschen) */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-sm text-gray-900 dark:text-white">
+                                {item.symbol}
+                              </span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-xs">
+                                · {item.name || item.symbol}
+                              </span>
+                              <span
+                                className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded ${
+                                  assetType === 'etf'
+                                    ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'
+                                    : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
+                                }`}
+                              >
+                                {assetType === 'etf' ? 'ETF' : 'Aktie'}
+                              </span>
+                              {item.isin && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-mono">
+                                  {item.isin}
+                                </span>
+                              )}
+                            </div>
+
+                        {/* Buttons: Kaufen & Löschen */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onOpenTransactionModal?.('buy', {
+                                symbol: item.symbol,
+                                name: item.name,
+                                price: currentPrice > 0 ? currentPrice : undefined,
+                                isin: item.isin,
+                                wkn: item.wkn,
+                                notes: item.notes,
+                              })
+                            }
+                            className="px-2.5 py-1 rounded-lg bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 text-xs font-semibold flex items-center gap-1 transition-colors active:scale-95"
+                            title="Ins Portfolio übernehmen (Kaufen)"
+                          >
+                            <Plus size={12} />
+                            <span className="hidden xs:inline">Kaufen</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => watchlist.removeItem(item.symbol)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                            title="Aus Watchliste entfernen"
+                            aria-label={`${item.symbol} aus Watchliste entfernen`}
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                          {item.name || item.symbol}
-                        </p>
-                        {item.notes && (
-                          <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5 italic">
-                            "{item.notes}"
-                          </p>
-                        )}
                       </div>
 
-                      {/* Rechte Seite: Live Kurs & Tages-% & Aktionen */}
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-right">
-                          <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white block">
-                            {price > 0 ? formatCurrency(price) : '—'}
+                      {/* Zeile 2: Financial Grid: Einstieg | Aktuell | Seit Einstieg | Tages- % */}
+                      <div className="grid grid-cols-[1fr_1fr_1.3fr_0.8fr] gap-1 sm:gap-2 text-left items-center pt-0.5">
+                        {/* Einstiegspreis */}
+                        <div className="min-w-0">
+                          <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 block truncate">
+                            Einstieg
                           </span>
-                          <div className="text-xs flex items-center justify-end gap-0.5 mt-0.5">
-                            {changePct > 0.001 ? (
-                              <span className="flex items-center gap-0.5 font-semibold text-green-600 dark:text-green-400">
-                                <span className="text-[10px] font-bold">↑</span>
-                                <span>{formatNumber(Math.abs(changePct), 2)}%</span>
+                          <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 block mt-0.5 truncate">
+                            {addedPrice > 0 ? formatCurrency(addedPrice) : '—'}
+                          </span>
+                        </div>
+
+                        {/* Aktueller Kurs */}
+                        <div className="min-w-0">
+                          <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 block truncate">
+                            Aktuell
+                          </span>
+                          <span
+                            className={`text-xs sm:text-sm block mt-0.5 truncate ${
+                              perfDiff > 0.0001
+                                ? 'text-green-600 dark:text-green-400 font-semibold'
+                                : perfDiff < -0.0001
+                                ? 'text-red-600 dark:text-red-400 font-semibold'
+                                : 'text-gray-900 dark:text-white font-medium'
+                            }`}
+                          >
+                            {currentPrice > 0 ? formatCurrency(currentPrice) : '—'}
+                          </span>
+                        </div>
+
+                        {/* Performance seit Hinzufügen (Differenz & %) */}
+                        <div className="min-w-0">
+                          <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 block truncate">
+                            Seit Einstieg
+                          </span>
+                          <div className="text-xs sm:text-sm mt-0.5 h-5 flex items-baseline truncate">
+                            {hasAddedPrice ? (
+                              perfDiff > 0.001 ? (
+                                <span className="flex items-baseline gap-0.5 font-semibold text-green-600 dark:text-green-400">
+                                  <span className="text-[9px] sm:text-xs font-bold self-center">↑</span>
+                                  <span>
+                                    +{formatCurrency(perfDiff)} ({formatNumber(perfPct, 2)}%)
+                                  </span>
+                                </span>
+                              ) : perfDiff < -0.001 ? (
+                                <span className="flex items-baseline gap-0.5 font-semibold text-red-600 dark:text-red-400">
+                                  <span className="text-[9px] sm:text-xs font-bold self-center">↓</span>
+                                  <span>
+                                    {formatCurrency(perfDiff)} ({formatNumber(perfPct, 2)}%)
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="font-medium text-gray-400 dark:text-gray-500">0,00 € (0,00%)</span>
+                              )
+                            ) : (
+                              <span className="font-medium text-gray-400 dark:text-gray-500">—</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Tages- % */}
+                        <div className="min-w-0 text-right">
+                          <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 block truncate">
+                            Tages- %
+                          </span>
+                          <div className="text-xs sm:text-sm mt-0.5 h-5 flex items-baseline justify-end truncate">
+                            {dailyChangePct > 0.001 ? (
+                              <span className="flex items-baseline gap-0.5 font-semibold text-green-600 dark:text-green-400">
+                                <span className="text-[9px] sm:text-xs font-bold self-center">↑</span>
+                                <span>{formatNumber(Math.abs(dailyChangePct), 2)}%</span>
                               </span>
-                            ) : changePct < -0.001 ? (
-                              <span className="flex items-center gap-0.5 font-semibold text-red-600 dark:text-red-400">
-                                <span className="text-[10px] font-bold">↓</span>
-                                <span>{formatNumber(Math.abs(changePct), 2)}%</span>
+                            ) : dailyChangePct < -0.001 ? (
+                              <span className="flex items-baseline gap-0.5 font-semibold text-red-600 dark:text-red-400">
+                                <span className="text-[9px] sm:text-xs font-bold self-center">↓</span>
+                                <span>{formatNumber(Math.abs(dailyChangePct), 2)}%</span>
                               </span>
                             ) : (
                               <span className="font-medium text-gray-400 dark:text-gray-500">0,00%</span>
                             )}
                           </div>
                         </div>
-
-                        {/* Kaufen Button */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onOpenTransactionModal?.('buy', {
-                              symbol: item.symbol,
-                              name: item.name,
-                              price: price > 0 ? price : undefined,
-                              isin: item.isin,
-                              wkn: item.wkn,
-                              notes: item.notes,
-                            })
-                          }
-                          className="px-2.5 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 text-xs font-semibold flex items-center gap-1 transition-colors active:scale-95"
-                          title="Ins Portfolio übernehmen (Kaufen)"
-                        >
-                          <Plus size={12} />
-                          <span className="hidden xs:inline">Kaufen</span>
-                        </button>
-
-                        {/* Löschen Button */}
-                        <button
-                          type="button"
-                          onClick={() => watchlist.removeItem(item.symbol)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                          title="Aus Watchliste entfernen"
-                          aria-label={`${item.symbol} aus Watchliste entfernen`}
-                        >
-                          <Trash2 size={15} />
-                        </button>
                       </div>
+
+                      {/* Optionale Notiz */}
+                      {item.notes && (
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate italic pt-0.5">
+                          „{item.notes}“
+                        </p>
+                      )}
                     </div>
                   );
                 })}
+                  </div>
+                ) : (
+                  <div className="text-center py-10 px-4">
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Keine {watchlistCategory === 'stock' ? 'Aktien' : 'ETFs'} gefunden
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      In dieser Kategorie befinden sich aktuell keine beobachteten Titel.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setWatchlistCategory('all')}
+                      className="mt-3 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+                    >
+                      Alle Einträge anzeigen ({watchlist.items.length})
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-12 px-4">

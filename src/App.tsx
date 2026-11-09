@@ -11,6 +11,7 @@ import { PriceEditModal } from '@/components/PriceEditModal';
 import { LockScreen } from '@/components/LockScreen';
 import type { Transaction, Holding, PortfolioExport } from '@/lib/types';
 import { getApiKeyConfig } from '@/lib/api';
+import { addToWatchlist } from '@/lib/watchlist';
 
 type Tab = 'dashboard' | 'holdings' | 'transactions' | 'settings';
 
@@ -153,10 +154,10 @@ function App() {
     setPriceModalOpen(true);
   }
 
-  async function handleICloudSync() {
+  async function handleICloudSync(customData?: PortfolioExport) {
     setSyncStep('saving');
     try {
-      const data: PortfolioExport = await portfolio.exportPortfolio();
+      const data: PortfolioExport = customData || (await portfolio.exportPortfolio());
       const jsonString = JSON.stringify(data, null, 2);
 
       // 1. iOS Detection (including iPadOS with desktop user agent)
@@ -424,6 +425,7 @@ function App() {
         }}
         onSave={handleSaveTransaction}
         onSaveHolding={portfolio.updateHolding}
+        onAddToWatchlist={addToWatchlist}
         knownBanks={knownBanks}
       />
       <PriceEditModal

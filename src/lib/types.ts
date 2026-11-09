@@ -72,19 +72,25 @@ export interface Holding {
 }
 
 export interface PortfolioExport {
-  version: 1;
-  exportedAt: number;
-  transactions: Transaction[];
-  manualPrices: ManualPrice[];
+  version: 1 | '1.1' | string | number;
+  exportedAt?: number;
+  exportDate?: string;
+  transactions?: Transaction[];
+  manualPrices?: ManualPrice[];
+  holdings?: Holding[];
+  watchlist?: WatchlistItem[];
+  portfolio_history?: Record<string, import('@/lib/history').HistoryEntry[]>;
 }
 
 export interface WatchlistItem {
   symbol: string;
   name: string;
+  assetType?: AssetType;
+  addedPrice: number;
+  addedAt: string; // ISO date
   isin?: string;
   wkn?: string;
   notes?: string;
-  addedAt: number;
   lastPrice?: number;
   lastChangePercent?: number;
 }

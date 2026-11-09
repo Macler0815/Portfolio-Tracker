@@ -13,6 +13,8 @@ import {
 } from '@/lib/db';
 import { fetchQuotes, isCacheValid, getApiKeyConfig } from '@/lib/api';
 import { computeHoldings, computeSummary } from '@/lib/calculations';
+import { getWatchlist, saveWatchlist } from '@/lib/watchlist';
+import { getPortfolioHistory, savePortfolioHistory, recordHoldingsSnapshot } from '@/lib/history';
 
 function safeRandomId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -121,6 +123,13 @@ export function usePortfolio() {
             await putPriceQuote({ symbol, price: q.price, fetchedAt: Date.now(), changePercent: q.changePercent }).catch(() => {});
             updatedCount++;
           }
+          // Automatic History Snapshot: record daily snapshot for each holding
+          try {
+            const updatedHoldings = computeHoldings(transactions, newPrices, manualPrices);
+            recordHoldingsSnapshot(updatedHoldings, quotes);
+          } catch (snapErr) {
+            console.warn('Error recording history snapshot:', snapErr);
+          }
         }
         if (mountedRef.current) {
           setPrices(newPrices);
@@ -147,7 +156,7 @@ export function usePortfolio() {
         if (mountedRef.current) setRefreshing(false);
       }
     },
-    [transactions, prices]
+    [transactions, prices, manualPrices]
   );
 
   // Auto-refresh on mount if cache is stale
@@ -167,6 +176,17 @@ export function usePortfolio() {
   // Derived state: holdings + summary
   const holdings: Holding[] = computeHoldings(transactions, prices, manualPrices);
   const summary: PortfolioSummary = computeSummary(holdings);
+
+  // Auto-record daily snapshot for holdings with valid prices
+  useEffect(() => {
+    if (holdings.length > 0 && prices.size > 0) {
+      try {
+        recordHoldingsSnapshot(holdings);
+      } catch (err) {
+        console.warn('Error recording holdings snapshot on price update:', err);
+      }
+    }
+  }, [holdings, prices]);
 
   // CRUD
   const addTransaction = useCallback(async (t: Omit<Transaction, 'id'>) => {
@@ -285,9 +305,15 @@ export function usePortfolio() {
       ]);
       const safeTxs = Array.isArray(txs) ? txs.filter(Boolean) : [];
       const safeManual = manual instanceof Map ? manual : new Map();
+      const currentWatchlist = getWatchlist();
+      const currentHistory = getPortfolioHistory();
       return {
-        version: 1,
+        version: '1.1',
+        exportDate: new Date().toISOString(),
         exportedAt: Date.now(),
+        holdings: holdings,
+        watchlist: currentWatchlist,
+        portfolio_history: currentHistory,
         transactions: safeTxs,
         manualPrices: Array.from(safeManual.entries()).map(([symbol, v]) => ({
           symbol,
@@ -297,13 +323,17 @@ export function usePortfolio() {
       };
     } catch {
       return {
-        version: 1,
+        version: '1.1',
+        exportDate: new Date().toISOString(),
         exportedAt: Date.now(),
+        holdings: holdings,
+        watchlist: getWatchlist(),
+        portfolio_history: getPortfolioHistory(),
         transactions: [],
         manualPrices: [],
       };
     }
-  }, []);
+  }, [holdings]);
 
   const importPortfolio = useCallback(async (data: PortfolioExport) => {
     if (!data || typeof data !== 'object') {
@@ -312,10 +342,59 @@ export function usePortfolio() {
     const safeTxs = Array.isArray(data.transactions) ? data.transactions.filter(Boolean) : [];
     const safeManuals = Array.isArray(data.manualPrices) ? data.manualPrices.filter(Boolean) : [];
 
+    // 1. Restore Watchlist if present (or fallback gracefully for older files)
+    if (data.watchlist && Array.isArray(data.watchlist)) {
+      saveWatchlist(data.watchlist);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('portfolio_watchlist', JSON.stringify(data.watchlist));
+        } catch (e) {
+          console.warn('Error saving imported watchlist to localStorage:', e);
+        }
+      }
+    }
+
+    // 2. Restore Portfolio History if present
+    if (data.portfolio_history && typeof data.portfolio_history === 'object' && !Array.isArray(data.portfolio_history)) {
+      savePortfolioHistory(data.portfolio_history);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('portfolio_history', JSON.stringify(data.portfolio_history));
+        } catch (e) {
+          console.warn('Error saving imported portfolio_history to localStorage:', e);
+        }
+      }
+    }
+
+    // 2. Restore Holdings & Transactions
     await clearAllData();
     for (const t of safeTxs) {
       if (t && t.id) await putTransaction(t);
     }
+
+    // Backward-compatibility: if an older backup only contains `holdings`
+    if (safeTxs.length === 0 && Array.isArray(data.holdings) && data.holdings.length > 0) {
+      for (let i = 0; i < data.holdings.length; i++) {
+        const h = data.holdings[i];
+        if (h && h.symbol) {
+          const synthTx: Transaction = {
+            id: `import-${Date.now()}-${i}`,
+            symbol: h.symbol.trim().toUpperCase(),
+            name: h.name || h.symbol,
+            type: 'buy',
+            quantity: h.quantity || 0,
+            price: h.avgBuyPrice || h.price || 0,
+            date: new Date().toISOString(),
+            broker: h.broker,
+            isin: h.isin,
+            wkn: h.wkn,
+            notes: h.notes,
+          };
+          await putTransaction(synthTx);
+        }
+      }
+    }
+
     for (const p of safeManuals) {
       if (p && p.symbol) await putManualPrice(p);
     }

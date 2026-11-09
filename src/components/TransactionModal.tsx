@@ -40,12 +40,15 @@ interface TransactionModalProps {
   onAddToWatchlist?: (item: {
     symbol: string;
     name: string;
+    assetType?: import('@/lib/types').AssetType;
+    addedPrice: number;
+    addedAt: string;
     isin?: string;
     wkn?: string;
     notes?: string;
     lastPrice?: number;
     lastChangePercent?: number;
-  }) => void;
+  }) => Promise<void> | void;
   knownBanks: string[];
 }
 
@@ -357,19 +360,37 @@ export function TransactionModal({
 
     // 1. WATCHLIST MODE
     if (modalTab === 'watchlist') {
+      let finalAddedPrice = parseFloat(price);
+      if (isNaN(finalAddedPrice) || finalAddedPrice <= 0) {
+        try {
+          const q = await fetchSingleQuote(cleanSymbol);
+          if (q && typeof q.price === 'number' && q.price > 0) {
+            finalAddedPrice = q.price;
+          }
+        } catch {
+          finalAddedPrice = 0;
+        }
+      }
+      if (isNaN(finalAddedPrice) || finalAddedPrice < 0) {
+        finalAddedPrice = 0;
+      }
+
       const watchItem = {
         symbol: cleanSymbol,
         name: name.trim() || cleanSymbol,
+        assetType: assetType || 'stock',
+        addedPrice: finalAddedPrice,
+        addedAt: new Date().toISOString(),
         isin: isin.trim() || undefined,
         wkn: wkn.trim() || undefined,
         notes: note.trim() || undefined,
-        lastPrice: parseFloat(price) > 0 ? parseFloat(price) : undefined,
+        lastPrice: finalAddedPrice > 0 ? finalAddedPrice : undefined,
       };
 
       if (onAddToWatchlist) {
-        onAddToWatchlist(watchItem);
+        await onAddToWatchlist(watchItem);
       } else {
-        addToWatchlist(watchItem);
+        await addToWatchlist(watchItem);
       }
 
       onClose();
@@ -691,6 +712,30 @@ export function TransactionModal({
                 <Sparkles size={16} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
               )}
               <span className="flex-1 font-medium">{lookupFeedback.text}</span>
+            </div>
+          )}
+
+          {/* WATCHLIST LIVE PRICE PREVIEW */}
+          {isWatchlist && (
+            <div className="rounded-xl p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/40 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bookmark size={15} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                <span className="text-gray-700 dark:text-gray-300 font-medium">
+                  Einstiegskurs beim Hinzufügen:
+                </span>
+              </div>
+              <span className="font-semibold text-gray-900 dark:text-white font-mono">
+                {priceFetching ? (
+                  <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                    <Loader2 size={12} className="animate-spin" />
+                    Lade Kurs…
+                  </span>
+                ) : parseFloat(price) > 0 ? (
+                  parseFloat(price).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
+                ) : (
+                  <span className="text-gray-400 dark:text-gray-500 italic">Wird live ermittelt</span>
+                )}
+              </span>
             </div>
           )}
 
