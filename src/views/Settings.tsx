@@ -12,6 +12,7 @@ import {
   verifyPermission,
   clearFileHandle,
 } from '@/lib/icloud';
+import { normalizeWatchlistItems } from '@/lib/watchlist';
 
 interface SettingsViewProps {
   onExport?: () => Promise<PortfolioExport>;
@@ -150,6 +151,15 @@ export function SettingsView({ onImport, onClear, getExportData, onApiKeyChanged
       ) {
         throw new Error('Invalid format');
       }
+
+      // Explicit storage update in handleIcloudLoad (Requirement 1)
+      const normalizedWatchlist = normalizeWatchlistItems(data.watchlist);
+      localStorage.setItem('portfolio_watchlist', JSON.stringify(normalizedWatchlist));
+
+      if (data.portfolio_history) {
+        localStorage.setItem('portfolio_history', JSON.stringify(data.portfolio_history));
+      }
+
       await onImport(data);
       setIcloudConnected(true);
       setIcloudFolderName(handle.name);

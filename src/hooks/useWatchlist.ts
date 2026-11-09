@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { WatchlistItem } from '@/lib/types';
 import {
   getWatchlist,
+  saveWatchlist,
+  normalizeWatchlistItems,
   addToWatchlist,
   removeFromWatchlist,
   updateWatchlistQuotes,
@@ -102,6 +104,14 @@ export function useWatchlist() {
     setItems(updated);
   }, []);
 
+  const setWatchlist = useCallback((newItems: WatchlistItem[] | unknown[]) => {
+    const normalized = normalizeWatchlistItems(newItems);
+    saveWatchlist(normalized);
+    if (mountedRef.current) {
+      setItems(normalized);
+    }
+  }, []);
+
   return {
     items,
     quotes,
@@ -109,5 +119,6 @@ export function useWatchlist() {
     refreshQuotes,
     addItem: add,
     removeItem: remove,
+    setWatchlist,
   };
 }

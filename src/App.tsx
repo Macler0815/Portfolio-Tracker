@@ -11,7 +11,9 @@ import { PriceEditModal } from '@/components/PriceEditModal';
 import { LockScreen } from '@/components/LockScreen';
 import type { Transaction, Holding, PortfolioExport } from '@/lib/types';
 import { getApiKeyConfig } from '@/lib/api';
-import { addToWatchlist } from '@/lib/watchlist';
+import { addToWatchlist, saveWatchlist, normalizeWatchlistItems } from '@/lib/watchlist';
+import { useWatchlist } from '@/hooks/useWatchlist';
+import { savePortfolioHistory } from '@/lib/history';
 
 type Tab = 'dashboard' | 'holdings' | 'transactions' | 'settings';
 
@@ -35,6 +37,7 @@ function App() {
 
   const portfolio = usePortfolio();
   const bio = useBiometric();
+  const { setWatchlist } = useWatchlist();
   const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
@@ -152,6 +155,24 @@ function App() {
   function handleEditPrice(h: Holding) {
     setPriceHolding(h);
     setPriceModalOpen(true);
+  }
+
+  async function handleImport(data: PortfolioExport) {
+    // 1. Explicit Storage Update for Watchlist & History
+    const normalizedWatchlist = normalizeWatchlistItems(data.watchlist);
+    localStorage.setItem('portfolio_watchlist', JSON.stringify(normalizedWatchlist));
+    saveWatchlist(normalizedWatchlist);
+
+    if (data.portfolio_history) {
+      localStorage.setItem('portfolio_history', JSON.stringify(data.portfolio_history));
+      savePortfolioHistory(data.portfolio_history);
+    }
+
+    // 2. State Synchronization in onImport (Requirement 2)
+    setWatchlist(normalizedWatchlist);
+
+    // 3. Database import for holdings & transactions
+    await portfolio.importPortfolio(data);
   }
 
   async function handleICloudSync(customData?: PortfolioExport) {
@@ -342,7 +363,7 @@ function App() {
           error={portfolio.error}
           onRefresh={() => portfolio.refreshPrices(true)}
           onICloudSync={handleICloudSync}
-          onICloudLoad={portfolio.importPortfolio}
+          onICloudLoad={handleImport}
           syncing={syncStep === 'saving'}
           syncDone={syncStep === 'done'}
           hasApiKey={hasApiKey}
@@ -373,7 +394,7 @@ function App() {
       {tab === 'settings' && (
         <SettingsView
           onExport={portfolio.exportPortfolio}
-          onImport={portfolio.importPortfolio}
+          onImport={handleImport}
           onClear={portfolio.clearPortfolio}
           getExportData={portfolio.exportPortfolio}
           onApiKeyChanged={() => { getApiKeyConfig().then((c) => setHasApiKey(!!c)); portfolio.refreshPrices(true); }}
@@ -425,7 +446,9 @@ function App() {
         }}
         onSave={handleSaveTransaction}
         onSaveHolding={portfolio.updateHolding}
-        onAddToWatchlist={addToWatchlist}
+        onAddToWatchlist={async (item) => {
+          await addToWatchlist(item);
+        }}
         knownBanks={knownBanks}
       />
       <PriceEditModal

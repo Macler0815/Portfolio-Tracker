@@ -4,72 +4,87 @@ import { fetchSingleQuote } from '@/lib/api';
 export const WATCHLIST_STORAGE_KEY = 'portfolio_watchlist';
 export const WATCHLIST_EVENT = 'portfolio_watchlist_updated';
 
+export function normalizeWatchlistItems(items: unknown[]): WatchlistItem[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item): WatchlistItem | null => {
+      if (!item) return null;
+      // Backward-compatibility: if item is just a string (e.g. "AAPL")
+      if (typeof item === 'string') {
+        const s = item.trim().toUpperCase();
+        if (!s) return null;
+        return {
+          symbol: s,
+          name: s,
+          assetType: 'stock',
+          addedPrice: 0,
+          addedAt: new Date().toISOString(),
+        };
+      }
+      if (typeof item !== 'object') return null;
+      const rec = item as Record<string, unknown>;
+      if (typeof rec.symbol !== 'string' || !rec.symbol.trim()) return null;
+      const cleanSymbol = rec.symbol.trim().toUpperCase();
+
+      const addedPrice =
+        typeof rec.addedPrice === 'number' && !isNaN(rec.addedPrice)
+          ? rec.addedPrice
+          : typeof rec.lastPrice === 'number' && !isNaN(rec.lastPrice)
+          ? rec.lastPrice
+          : 0;
+
+      let addedAtStr = new Date().toISOString();
+      if (typeof rec.addedAt === 'string' && rec.addedAt.trim()) {
+        addedAtStr = rec.addedAt;
+      } else if (typeof rec.addedAt === 'number' && rec.addedAt > 0) {
+        addedAtStr = new Date(rec.addedAt).toISOString();
+      }
+
+      const assetType =
+        rec.assetType === 'etf' || rec.assetType === 'stock'
+          ? (rec.assetType as 'stock' | 'etf')
+          : undefined;
+
+      const resItem: WatchlistItem = {
+        symbol: cleanSymbol,
+        name: typeof rec.name === 'string' && rec.name.trim() ? rec.name.trim() : cleanSymbol,
+        assetType,
+        addedPrice: Math.max(0, addedPrice),
+        addedAt: addedAtStr,
+        isin: rec.isin ? String(rec.isin).trim().toUpperCase() : undefined,
+        wkn: rec.wkn ? String(rec.wkn).trim().toUpperCase() : undefined,
+        notes: rec.notes ? String(rec.notes).trim() : undefined,
+        lastPrice: typeof rec.lastPrice === 'number' ? rec.lastPrice : undefined,
+        lastChangePercent: typeof rec.lastChangePercent === 'number' ? rec.lastChangePercent : undefined,
+      };
+
+      if (!resItem.assetType) {
+        resItem.assetType = getWatchlistItemAssetType(resItem);
+      }
+      return resItem;
+    })
+    .filter((item): item is WatchlistItem => item !== null);
+}
+
 export function getWatchlist(): WatchlistItem[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(WATCHLIST_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .map((item): WatchlistItem | null => {
-        if (!item) return null;
-        // Backward-compatibility: if item is just a string (e.g. "AAPL")
-        if (typeof item === 'string') {
-          const s = item.trim().toUpperCase();
-          if (!s) return null;
-          return {
-            symbol: s,
-            name: s,
-            addedPrice: 0,
-            addedAt: new Date().toISOString(),
-          };
-        }
-        if (typeof item.symbol !== 'string' || !item.symbol.trim()) return null;
-        const cleanSymbol = item.symbol.trim().toUpperCase();
-
-        const addedPrice =
-          typeof item.addedPrice === 'number' && !isNaN(item.addedPrice)
-            ? item.addedPrice
-            : typeof item.lastPrice === 'number' && !isNaN(item.lastPrice)
-            ? item.lastPrice
-            : 0;
-
-        let addedAtStr = new Date().toISOString();
-        if (typeof item.addedAt === 'string' && item.addedAt.trim()) {
-          addedAtStr = item.addedAt;
-        } else if (typeof item.addedAt === 'number' && item.addedAt > 0) {
-          addedAtStr = new Date(item.addedAt).toISOString();
-        }
-
-        const assetType = item.assetType === 'etf' || item.assetType === 'stock' ? item.assetType : undefined;
-
-        return {
-          symbol: cleanSymbol,
-          name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : cleanSymbol,
-          assetType,
-          addedPrice: Math.max(0, addedPrice),
-          addedAt: addedAtStr,
-          isin: item.isin ? String(item.isin).trim().toUpperCase() : undefined,
-          wkn: item.wkn ? String(item.wkn).trim().toUpperCase() : undefined,
-          notes: item.notes ? String(item.notes).trim() : undefined,
-          lastPrice: typeof item.lastPrice === 'number' ? item.lastPrice : undefined,
-          lastChangePercent: typeof item.lastChangePercent === 'number' ? item.lastChangePercent : undefined,
-        };
-      })
-      .filter((item): item is WatchlistItem => item !== null);
+    return normalizeWatchlistItems(parsed);
   } catch (err) {
     console.error('Error reading watchlist from localStorage:', err);
     return [];
   }
 }
 
-export function getWatchlistItemAssetType(item: WatchlistItem): 'stock' | 'etf' {
+export function getWatchlistItemAssetType(item: WatchlistItem | null | undefined): 'stock' | 'etf' {
+  if (!item) return 'stock';
   if (item.assetType === 'etf' || item.assetType === 'stock') {
     return item.assetType;
   }
-  const text = `${item.symbol} ${item.name || ''} ${item.notes || ''}`.toUpperCase();
+  const text = `${item.symbol || ''} ${item.name || ''} ${item.notes || ''}`.toUpperCase();
   if (
     text.includes('ETF') ||
     text.includes('UCITS') ||
@@ -90,11 +105,12 @@ export function getWatchlistItemAssetType(item: WatchlistItem): 'stock' | 'etf' 
   return 'stock';
 }
 
-export function saveWatchlist(items: WatchlistItem[]): void {
+export function saveWatchlist(items: unknown[]): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(items));
-    window.dispatchEvent(new CustomEvent(WATCHLIST_EVENT, { detail: items }));
+    const normalized = normalizeWatchlistItems(items);
+    localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(normalized));
+    window.dispatchEvent(new CustomEvent(WATCHLIST_EVENT, { detail: normalized }));
   } catch (err) {
     console.error('Error saving watchlist to localStorage:', err);
   }

@@ -382,6 +382,7 @@ export function usePortfolio() {
             symbol: h.symbol.trim().toUpperCase(),
             name: h.name || h.symbol,
             type: 'buy',
+            assetType: h.assetType || 'stock',
             quantity: h.quantity || 0,
             price: h.avgBuyPrice || h.price || 0,
             date: new Date().toISOString(),
