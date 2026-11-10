@@ -25,6 +25,7 @@ export default defineConfig(({ command }) => {
   }
 
   return {
+    base: '/Portfolio-Tracker/',
     plugins: [react()],
     clearScreen: false,
     server: {
