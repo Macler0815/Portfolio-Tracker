@@ -24,9 +24,27 @@ export default defineConfig(({ command }) => {
     }
   }
 
+  const isBuild = command === 'build';
+  const base = isBuild ? '/Portfolio-Tracker/' : '/';
+
   return {
-    base: '/Portfolio-Tracker/',
-    plugins: [react()],
+    base,
+    plugins: [
+      react(),
+      {
+        name: 'dev-base-handler',
+        configureServer(server) {
+          server.middlewares.use((req, _res, next) => {
+            if (req.url && req.url.startsWith('/Portfolio-Tracker/')) {
+              req.url = req.url.replace('/Portfolio-Tracker/', '/');
+            } else if (req.url === '/Portfolio-Tracker') {
+              req.url = '/';
+            }
+            next();
+          });
+        },
+      },
+    ],
     clearScreen: false,
     server: {
       host: '0.0.0.0',

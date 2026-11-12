@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Trash2, ArrowUpRight, ArrowDownRight, ChevronDown, Clock, Maximize2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Trash2, ArrowUpRight, ArrowDownRight, ChevronDown, Clock, Maximize2, AlertTriangle } from 'lucide-react';
 import type { Transaction } from '@/lib/types';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
 import { usePortfolioHistory } from '@/hooks/usePortfolioHistory';
@@ -21,6 +21,18 @@ export function TransactionsView({ transactions, onEdit, onDelete }: Transaction
     name?: string;
     entries: HistoryEntry[];
   } | null>(null);
+  const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
+
+  useEffect(() => {
+    if (!deletingTx) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDeletingTx(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deletingTx]);
 
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => {
@@ -136,12 +148,13 @@ export function TransactionsView({ transactions, onEdit, onDelete }: Transaction
                   <ChevronDown size={17} />
                 </button>
 
-                {/* Löschen Button */}
+                {/* Löschen Button mit Nachfrage */}
                 <button
-                  onClick={() => onDelete(t.id)}
+                  type="button"
+                  onClick={() => setDeletingTx(t)}
                   className="shrink-0 p-2 text-gray-400 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-colors"
                   title="Transaktion löschen"
-                  aria-label="Transaktion löschen"
+                  aria-label={`Transaktion für ${t.name} (${t.symbol}) löschen`}
                 >
                   <Trash2 size={17} />
                 </button>
@@ -294,6 +307,101 @@ export function TransactionsView({ transactions, onEdit, onDelete }: Transaction
           name={modalState.name}
           entries={modalState.entries}
         />
+      )}
+
+      {/* Bestätigungs-Dialog: Transaktion löschen */}
+      {deletingTx && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          onClick={() => setDeletingTx(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 shadow-2xl animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-tx-title"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 id="delete-tx-title" className="text-base font-semibold text-gray-900 dark:text-white">
+                  Position löschen?
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {deletingTx.symbol} · {deletingTx.name}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-gray-50 dark:bg-gray-800/60 p-3.5 space-y-1.5 border border-gray-100 dark:border-gray-800/60 text-xs text-gray-600 dark:text-gray-300">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 dark:text-gray-500">Aktion</span>
+                <span
+                  className={`font-semibold ${
+                    deletingTx.type === 'buy'
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'
+                  }`}
+                >
+                  {deletingTx.type === 'buy' ? 'Kauf (+)' : 'Verkauf (−)'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 dark:text-gray-500">Datum</span>
+                <span className="font-medium text-gray-800 dark:text-gray-200">
+                  {formatDate(deletingTx.date)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 dark:text-gray-500">Menge & Kurs</span>
+                <span className="font-medium text-gray-800 dark:text-gray-200">
+                  {formatNumber(deletingTx.quantity, 0)} × {formatCurrency(deletingTx.price)}
+                </span>
+              </div>
+              {deletingTx.bank && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400 dark:text-gray-500">Depot / Broker</span>
+                  <span className="font-medium text-gray-800 dark:text-gray-200">
+                    {deletingTx.bank}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-1.5 border-t border-gray-200/60 dark:border-gray-700/60 font-semibold text-gray-900 dark:text-white">
+                <span>Gesamtbetrag</span>
+                <span>{formatCurrency(deletingTx.quantity * deletingTx.price)}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 leading-relaxed">
+              Möchtest du diese Transaktion wirklich unwiderruflich löschen? Dein Portfolio-Bestand und alle Kennzahlen werden entsprechend neu berechnet.
+            </p>
+
+            <div className="mt-5 flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeletingTx(null)}
+                className="flex-1 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 py-2.5 text-xs font-semibold active:scale-95 transition-all cursor-pointer"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const id = deletingTx.id;
+                  setDeletingTx(null);
+                  onDelete(id);
+                }}
+                className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white py-2.5 text-xs font-semibold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 size={14} />
+                <span>Ja, löschen</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
